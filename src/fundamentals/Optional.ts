@@ -184,9 +184,10 @@ export class Optional<T> extends JavaObject {
 
   public override equals(other: unknown): boolean {
     return boilerplateEqualityCheck<Optional<T>>({ obj1: this, obj2: other }, (o1, o2) => {
-      // `Object.create(Optional.prototype)` passes the class check but carries no private state, and reading
-      // `#value` off it would throw a TypeError. Java's contract says equals returns false for anything it
-      // does not recognise, never throws, so brand-check before touching the field.
+      // `Reflect.construct(JavaObject, [], Optional)` runs JavaObject's constructor against this prototype, so
+      // it clears both of boilerplateEqualityCheck's gates — `#hash` is present, the prototype matches — while
+      // never installing `#value`. Reading that field off it would throw a TypeError. Java's contract says
+      // equals returns false for anything it does not recognise, never throws, so brand-check first.
       if (!(#value in o2)) {
         return false;
       }
