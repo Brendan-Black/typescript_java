@@ -48,8 +48,8 @@ export class JavaMapEntry<K, V> extends JavaObject implements Serializable {
     return `${String(this.#key)}=${String(this.#value)}`;
   }
 
-  public toJSON(): string {
-    return JSON.stringify({ key: this.#key, value: this.#value });
+  public toJSON(): unknown {
+    return { key: this.#key, value: this.#value };
   }
 }
 
@@ -618,8 +618,8 @@ export class JavaMap<K, V> extends JavaObject implements Iterable<[K, V]>, Seria
    * Deliberately not a JSON object: object keys can only be strings, and a map whose keys are numbers, nulls or
    * JavaObjects would either collide or lose information on the way out.
    */
-  public toJSON(): string {
-    return JSON.stringify([...this]);
+  public toJSON(): unknown {
+    return [...this];
   }
 }
 
