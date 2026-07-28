@@ -1,4 +1,4 @@
-import { TSJavaException } from "./TSJavaException";
+import { TSJavaException } from "./TSJavaException.js";
 
 /**
  * basic implementa of a package level exception.

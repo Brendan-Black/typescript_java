@@ -1,4 +1,4 @@
-import { TSJavaException } from "./TSJavaException";
+import { TSJavaException } from "./TSJavaException.js";
 
 /**
  * exception for when a method is not implemented in this package

@@ -1,7 +1,7 @@
-import { IllegalArgumentException } from "../exceptions/IllegalArgumentException";
-import { IllegalStateException } from "../exceptions/IllegalStateException";
-import { TSJavaException } from "../exceptions/TSJavaException";
-import { boilerplateEqualityCheck, JavaObject } from "./Object";
+import { IllegalArgumentException } from "../exceptions/IllegalArgumentException.js";
+import { IllegalStateException } from "../exceptions/IllegalStateException.js";
+import { TSJavaException } from "../exceptions/TSJavaException.js";
+import { boilerplateEqualityCheck, JavaObject } from "./Object.js";
 
 export class Optional<T> extends JavaObject {
   #value: T | null;
@@ -80,31 +80,38 @@ export class Optional<T> extends JavaObject {
   }
 
   /**
-   * used to convert the internal optional value to a different type
+   * used to convert the internal optional value to a different type.
+   *
+   * If the mapper returns null (or undefined), the result is an empty Optional rather than an error — matching
+   * Java, where `map` is null-safe. The return type stays `Optional<U>`: letting null back into the type
+   * parameter would just reintroduce the problem Optional exists to solve.
    * @param mapper
    */
-  public map<U>(mapper: (value: T) => U): Optional<U | null> {
+  public map<U>(mapper: (value: T) => U | null | undefined): Optional<U> {
     if (this.#value === null) {
-      return Optional.ofNullable(null);
+      return Optional.ofNullable<U>(null);
     }
-    return Optional.of(mapper(this.#value));
+    return Optional.ofNullable<U>(mapper(this.#value) ?? null);
   }
 
   /**
-   * used to convert the internal optional value to a different type,
-   * however, if it produces another Optional, it will flatten/unwrap it it.
+   * used to convert the internal optional value to a different type where the mapper itself returns an Optional,
+   * yielding a single-layer result rather than an `Optional<Optional<U>>`.
+   *
+   * The mapper's Optional is returned as-is, empty or not. It is never unwrapped a second time: in Java the
+   * mapper's type is `T -> Optional<U>`, so a nested Optional means the caller has a bug worth surfacing, not
+   * something to silently flatten.
    * @param mapper
    */
-  public flatMap<U>(mapper: (value: T) => Optional<U | Optional<U>>): Optional<U | null> {
+  public flatMap<U>(mapper: (value: T) => Optional<U>): Optional<U> {
     if (this.#value === null) {
-      return Optional.ofNullable(null);
+      return Optional.ofNullable<U>(null);
     }
-    const firstLayer = mapper(this.#value!);
-    if (firstLayer && firstLayer instanceof Optional && firstLayer.get() instanceof Optional) {
-      return firstLayer.get() as Optional<U>;
-    } else {
-      return firstLayer as Optional<U>;
+    const result = mapper(this.#value);
+    if (!(result instanceof Optional)) {
+      throw new IllegalArgumentException("The mapper passed to flatMap must return an Optional.");
     }
+    return result;
   }
 
   /**
@@ -125,6 +132,12 @@ export class Optional<T> extends JavaObject {
 
   public equals(other: any): boolean {
     return boilerplateEqualityCheck<Optional<T>>({ obj1: this, obj2: other }, (o1, o2) => {
+      // `Object.create(Optional.prototype)` passes the class check but carries no private state, and reading
+      // `#value` off it would throw a TypeError. Java's contract says equals returns false for anything it
+      // does not recognise, never throws, so brand-check before touching the field.
+      if (!(#value in o2)) {
+        return false;
+      }
       return o1.#value === o2.#value;
     });
   }

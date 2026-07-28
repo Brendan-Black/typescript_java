@@ -13,8 +13,13 @@ export abstract class JavaObject extends Object {
     super();
     this.#hash = Math.floor(Math.random() * 0x7fffffff);
   }
+
+  /**
+   * Java's is `getClass().getName() + "@" + Integer.toHexString(hashCode())`. `hashCode()` is a virtual
+   * call there, so subclasses that override it are reflected here too.
+   */
   public toString(): string {
-    return this.constructor.name + "@" + Math.random().toString(16);
+    return this.constructor.name + "@" + this.hashCode().toString(16);
   }
 
   /**
@@ -36,6 +41,10 @@ export abstract class JavaObject extends Object {
    * in essence, this is completely useless outside of the context of this library, and even within it it is merely a quick
    * property to check for "equality" of two objects that may have been deep copied, or any other number of ways
    * that JavaScript tomfoolery can leak in.
+   *
+   * NOTE: this is identity-based, so two structurally equal objects get different hash codes. Never use it as a
+   * precondition for equality — Java's contract only runs one way (equal objects must share a hash code, not the
+   * reverse). A subclass with value semantics should override this to derive from its fields.
    * @returns
    */
   public hashCode(): number {
@@ -48,6 +57,9 @@ export abstract class JavaObject extends Object {
  * this is simply a helper method to define a "base" equals method for class overrides. It is difficult to navigate
  * the many problems with Javascript and keeping them in mind while in "Java mode" can be unduely arduous, so this is provided
  * as a boilerplate method in doing so.
+ *
+ * With no callback this reproduces Java's default `Object.equals`, which is reference equality. Pass a callback to
+ * add the field-by-field comparison a value type needs; it runs only once the null/type/class checks have passed.
  * @param obj1 the first object to compare
  * @param obj2 the second object to compare
  * @param callback an optional callback that can be used to provide custom equality logic
@@ -55,23 +67,25 @@ export abstract class JavaObject extends Object {
  */
 export function boilerplateEqualityCheck<T extends JavaObject>({ obj1, obj2 }: { obj1: JavaObject; obj2: any }, callback?: (o1: T, o2: T) => boolean): boolean {
   if (obj1 === obj2) {
-    return obj2;
+    return true;
   }
-  if (obj2 === null || obj2 === undefined) {
+  if (obj2 === null || obj2 === undefined || typeof obj2 !== "object") {
     return false;
   }
   // this is pretty much as close as we can get to Java's `this.getClass() == obj2.getClass()` check.
-  // The results can still be faked because #JavaScriptIsAnAcidTrip
+  // Prototype identity rather than `constructor.name`: names collapse under minification, where two
+  // unrelated classes can both become `t` and would then compare as the same type.
+  // The result can still be faked because #JavaScriptIsAnAcidTrip
   // Example:
   /*
-		  const Fake = {constructor:{ name: "JavaObject"}, hashCode: () => 12345};
-		  Object.setPrototypeOf(Fake, JavaObject.prototype);
+		  const Fake = Object.create(JavaObject.prototype);
 		 */
-  if (typeof obj2 !== "object" || !obj2.constructor || !(obj2 instanceof JavaObject) || obj2.constructor.name !== obj1.constructor.name) {
+  // so a callback that reads private state must brand-check first — see Optional#equals.
+  if (!(obj2 instanceof JavaObject) || Object.getPrototypeOf(obj1) !== Object.getPrototypeOf(obj2)) {
     return false;
   }
-  if (obj1.hashCode() === obj2.hashCode()) {
-    return callback ? callback(obj1 as T, obj2 as T) : true; // if a callback is provided, use it to determine equality
-  }
-  return false;
+  // NOTE: deliberately no `hashCode()` comparison. Hash codes here are identity-based, so gating on them
+  // would make every callback unreachable and would invert Java's contract.
+  // reaching here means obj1 !== obj2, so with no custom logic Java's answer is `false`.
+  return callback ? callback(obj1 as T, obj2 as T) : false;
 }
