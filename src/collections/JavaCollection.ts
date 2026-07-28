@@ -100,8 +100,8 @@ export abstract class JavaCollection<T> extends JavaObject implements Iterable<T
   }
 
   /** Serialises as a JSON array, so `JSON.stringify` produces something a caller would expect. */
-  public toJSON(): unknown {
-    return this.toArray();
+  public toJSON(): string {
+    return JSON.stringify(this.toArray());
   }
 }
 
