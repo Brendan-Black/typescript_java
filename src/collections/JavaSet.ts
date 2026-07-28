@@ -94,7 +94,7 @@ export class JavaSet<T> extends JavaAbstractSet<T> {
    * Overrides {@link JavaAbstractSet.retainAll}, which is O(n*m) because it can only scan its argument. Hashing
    * the argument once makes this O(n+m), and hashing is the one thing this class is already good at.
    */
-  public retainAll(values: Iterable<T>): boolean {
+  public override retainAll(values: Iterable<T>): boolean {
     this.#requireMutable("retainAll");
     const keep = values instanceof JavaSet ? (values as JavaSet<T>) : new JavaSet<T>(values);
     // snapshot first: this removes from the very set it is scanning

@@ -177,7 +177,7 @@ export class Optional<T> extends JavaObject {
    * @returns
    */
 
-  public equals(other: any): boolean {
+  public override equals(other: any): boolean {
     return boilerplateEqualityCheck<Optional<T>>({ obj1: this, obj2: other }, (o1, o2) => {
       // `Object.create(Optional.prototype)` passes the class check but carries no private state, and reading
       // `#value` off it would throw a TypeError. Java's contract says equals returns false for anything it
@@ -197,11 +197,11 @@ export class Optional<T> extends JavaObject {
    * different hash codes: a broken contract, and an Optional that could never be found again once used as a
    * `JavaMap` key.
    */
-  public hashCode(): number {
+  public override hashCode(): number {
     return hashCodeOf(this.#value);
   }
 
-  public toString(): string {
+  public override toString(): string {
     return `Optional[${this.#value === null ? "null" : this.#value}, typeof=${typeof this.#value}, hashcode=${this.hashCode()}]`;
   }
 

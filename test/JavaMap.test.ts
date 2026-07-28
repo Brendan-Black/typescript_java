@@ -305,11 +305,13 @@ describe("JavaMap iteration", () => {
   it("entrySet yields comparable entries", () => {
     const map = new JavaMap<string, number>([["a", 1]]);
     const entries = map.entrySet().toArray();
+    const [entry] = entries;
     assert.equal(entries.length, 1);
-    assert.equal(entries[0].getKey(), "a");
-    assert.equal(entries[0].getValue(), 1);
-    assert.equal(entries[0].equals(new JavaMapEntry("a", 1)), true);
-    assert.equal(entries[0].equals(new JavaMapEntry("a", 2)), false);
+    assert.ok(entry);
+    assert.equal(entry.getKey(), "a");
+    assert.equal(entry.getValue(), 1);
+    assert.equal(entry.equals(new JavaMapEntry("a", 1)), true);
+    assert.equal(entry.equals(new JavaMapEntry("a", 2)), false);
     assert.equal(new JavaMapEntry("a", 1).hashCode(), new JavaMapEntry("a", 1).hashCode());
   });
 

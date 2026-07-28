@@ -102,9 +102,11 @@ describe("hash contract warnings", () => {
     const warnings = captureWarnings(() => {
       new JavaMap<JavaObject, string>().put(new BrokenKey(1), "a");
     });
+    const [warning] = warnings;
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0], /BrokenKey/);
-    assert.match(warnings[0], /hashCode/);
+    assert.ok(warning);
+    assert.match(warning, /BrokenKey/);
+    assert.match(warning, /hashCode/);
   });
 
   it("warns once per class, not once per insertion", () => {
@@ -178,9 +180,11 @@ describe("hash contract warnings", () => {
         map.put(new Clustered(i), i);
       }
     });
+    const [warning] = warnings;
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0], /Clustered/);
-    assert.match(warnings[0], /hash code/);
+    assert.ok(warning);
+    assert.match(warning, /Clustered/);
+    assert.match(warning, /hash code/);
   });
 
   it("tolerates a short collision chain in silence", () => {

@@ -1,6 +1,7 @@
 import { ConcurrentModificationException } from "../exceptions/ConcurrentModificationException.js";
 import { IndexOutOfBoundsException } from "../exceptions/IndexOutOfBoundsException.js";
 import { equalsOf, hashCodeOf } from "../fundamentals/Hashing.js";
+import { elementAt } from "../fundamentals/Indexing.js";
 import { JavaObject } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
 import { JavaCollection, unsupported } from "./JavaCollection.js";
@@ -87,7 +88,7 @@ export class JavaList<T> extends JavaCollection<T> {
    */
   public get(index: number): T {
     this.#requireInRange(index);
-    return this.#state.items[index];
+    return elementAt(this.#state.items, index, "JavaList.get");
   }
 
   /** The bounds-checked read as an Optional, for when an absent index is an ordinary outcome rather than a bug. */
@@ -105,7 +106,7 @@ export class JavaList<T> extends JavaCollection<T> {
   public set(index: number, value: T): T {
     this.#requireMutable("set");
     this.#requireInRange(index);
-    const previous = this.#state.items[index];
+    const previous = elementAt(this.#state.items, index, "JavaList.set");
     // not a structural change, so modCount is deliberately left alone — Java treats replacement the same way
     this.#state.items[index] = value;
     return previous;
@@ -141,7 +142,7 @@ export class JavaList<T> extends JavaCollection<T> {
     this.#requireMutable("removeAt");
     this.#requireInRange(index);
     this.#state.modCount++;
-    return this.#state.items.splice(index, 1)[0];
+    return elementAt(this.#state.items.splice(index, 1), 0, "JavaList.removeAt");
   }
 
   /**
@@ -216,7 +217,7 @@ export class JavaList<T> extends JavaCollection<T> {
   public replaceAll(operator: (value: T, index: number) => T): void {
     this.#requireMutable("replaceAll");
     for (let i = 0; i < this.#state.items.length; i++) {
-      this.#state.items[i] = operator(this.#state.items[i], i);
+      this.#state.items[i] = operator(elementAt(this.#state.items, i, "JavaList.replaceAll"), i);
     }
   }
 
@@ -230,7 +231,7 @@ export class JavaList<T> extends JavaCollection<T> {
       if (this.#state.modCount !== expected) {
         throw new ConcurrentModificationException("The list was modified while it was being iterated.");
       }
-      yield this.#state.items[i];
+      yield elementAt(this.#state.items, i, "JavaList iterator");
     }
   }
 
@@ -238,7 +239,7 @@ export class JavaList<T> extends JavaCollection<T> {
    * Java's `AbstractList.equals`: same length, equal elements, in the same order. Order matters here and does
    * not for a set, which is the whole difference between the two.
    */
-  public equals(other: any): boolean {
+  public override equals(other: any): boolean {
     if (this === other) {
       return true;
     }
@@ -261,7 +262,7 @@ export class JavaList<T> extends JavaCollection<T> {
    * Java's `AbstractList.hashCode`. Order-sensitive, matching {@link equals} — the multiply-and-add means
    * moving an element changes the result, which summing (as a set does) would not.
    */
-  public hashCode(): number {
+  public override hashCode(): number {
     let hash = 1;
     for (const value of this.#state.items) {
       hash = (Math.imul(31, hash) + hashCodeOf(value)) | 0;

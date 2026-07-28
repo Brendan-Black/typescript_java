@@ -95,7 +95,7 @@ export abstract class JavaCollection<T> extends JavaObject implements Iterable<T
   }
 
   /** Java's `AbstractCollection.toString`: `[a, b, c]`. */
-  public toString(): string {
+  public override toString(): string {
     return `[${this.toArray().map((value) => String(value)).join(", ")}]`;
   }
 
@@ -124,7 +124,7 @@ export function unsupported(operation: string, reason: string): never {
  * holding the same members are equal, as they should be.
  */
 export abstract class JavaAbstractSet<T> extends JavaCollection<T> {
-  public equals(other: any): boolean {
+  public override equals(other: any): boolean {
     if (this === other) {
       return true;
     }
@@ -141,7 +141,7 @@ export abstract class JavaAbstractSet<T> extends JavaCollection<T> {
   }
 
   /** Java's `AbstractSet.hashCode`: the sum of the element hash codes. */
-  public hashCode(): number {
+  public override hashCode(): number {
     let hash = 0;
     for (const value of this) {
       hash = (hash + hashCodeOf(value)) | 0;

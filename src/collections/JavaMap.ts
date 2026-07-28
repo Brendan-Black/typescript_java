@@ -1,6 +1,7 @@
 import { ConcurrentModificationException } from "../exceptions/ConcurrentModificationException.js";
 import { checkCollisionChain, checkHashContract } from "../fundamentals/Contracts.js";
 import { equalsOf, hashCodeOf } from "../fundamentals/Hashing.js";
+import { elementAt } from "../fundamentals/Indexing.js";
 import { boilerplateEqualityCheck, JavaObject } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
 import type { Serializable } from "../serialization/Serializable.js";
@@ -29,7 +30,7 @@ export class JavaMapEntry<K, V> extends JavaObject implements Serializable {
     return this.#value;
   }
 
-  public equals(other: any): boolean {
+  public override equals(other: any): boolean {
     return boilerplateEqualityCheck<JavaMapEntry<K, V>>({ obj1: this, obj2: other }, (o1, o2) => {
       if (!(#key in o2)) {
         return false;
@@ -39,11 +40,11 @@ export class JavaMapEntry<K, V> extends JavaObject implements Serializable {
   }
 
   /** Java's `Map.Entry.hashCode`: the key's hash XORed with the value's. */
-  public hashCode(): number {
+  public override hashCode(): number {
     return hashCodeOf(this.#key) ^ hashCodeOf(this.#value);
   }
 
-  public toString(): string {
+  public override toString(): string {
     return `${String(this.#key)}=${String(this.#value)}`;
   }
 
@@ -437,7 +438,7 @@ export class JavaMap<K, V> extends JavaObject implements Iterable<[K, V]>, Seria
       return expected.length === 1 ? false : null;
     }
     for (let i = 0; i < bucket.length; i++) {
-      const node = bucket[i];
+      const node = elementAt(bucket, i, "JavaMap.remove");
       if (!equalsOf(key, node.key)) {
         continue;
       }
@@ -571,7 +572,7 @@ export class JavaMap<K, V> extends JavaObject implements Iterable<[K, V]>, Seria
    * Java's `AbstractMap.equals`: same size, and every key maps to an equal value. Order is not part of it, so
    * two maps built by different insertion sequences are still equal.
    */
-  public equals(other: any): boolean {
+  public override equals(other: any): boolean {
     return boilerplateEqualityCheck<JavaMap<K, V>>({ obj1: this, obj2: other }, (o1, o2) => {
       if (!(#state in o2) || o1.#state.size !== o2.#state.size) {
         return false;
@@ -593,7 +594,7 @@ export class JavaMap<K, V> extends JavaObject implements Iterable<[K, V]>, Seria
    * IMPORTANT: this changes as the map does. A mutable collection used as a key in another hash-based collection
    * will go missing the moment it is modified — true on the JVM as well.
    */
-  public hashCode(): number {
+  public override hashCode(): number {
     let hash = 0;
     for (let node = this.#state.head; node !== null; node = node.after) {
       hash = (hash + (hashCodeOf(node.key) ^ hashCodeOf(node.value))) | 0;
@@ -602,7 +603,7 @@ export class JavaMap<K, V> extends JavaObject implements Iterable<[K, V]>, Seria
   }
 
   /** Java's `AbstractMap.toString`: `{a=1, b=2}`. */
-  public toString(): string {
+  public override toString(): string {
     const parts: string[] = [];
     for (let node = this.#state.head; node !== null; node = node.after) {
       parts.push(`${String(node.key)}=${String(node.value)}`);

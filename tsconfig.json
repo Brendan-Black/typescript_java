@@ -12,6 +12,8 @@
 		"forceConsistentCasingInFileNames": true,
 		"noImplicitAny": true,
 		"strictNullChecks": true,
+		"noImplicitOverride": true,
+		"noUncheckedIndexedAccess": true,
 		"declaration": true,
 		"declarationMap": true,
 		"sourceMap": true,
