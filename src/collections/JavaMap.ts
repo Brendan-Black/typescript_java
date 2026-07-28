@@ -1,13 +1,17 @@
+import { ConcurrentModificationException } from "../exceptions/ConcurrentModificationException.js";
+import { checkCollisionChain, checkHashContract } from "../fundamentals/Contracts.js";
 import { equalsOf, hashCodeOf } from "../fundamentals/Hashing.js";
 import { boilerplateEqualityCheck, JavaObject } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
-import { JavaSet } from "./JavaSet.js";
+import type { Serializable } from "../serialization/Serializable.js";
+import { JavaAbstractSet, JavaCollection, unsupported } from "./JavaCollection.js";
 
 /**
  * One key/value pair, as handed out by {@link JavaMap.entrySet}. Java's `Map.Entry`, minus `setValue` — these
- * are snapshots rather than live views into the map, so writing through one would not do what it looks like.
+ * are snapshots of a pair rather than a handle on the map, so writing through one would not do what it looks
+ * like.
  */
-export class JavaMapEntry<K, V> extends JavaObject {
+export class JavaMapEntry<K, V> extends JavaObject implements Serializable {
   readonly #key: K;
   readonly #value: V;
 
@@ -42,6 +46,10 @@ export class JavaMapEntry<K, V> extends JavaObject {
   public toString(): string {
     return `${String(this.#key)}=${String(this.#value)}`;
   }
+
+  public toJSON(): unknown {
+    return { key: this.#key, value: this.#value };
+  }
 }
 
 /**
@@ -59,6 +67,23 @@ interface Node<K, V> {
 }
 
 /**
+ * The mutable innards, held behind one reference so an unmodifiable view can share them and stay live.
+ * See {@link JavaMap.unmodifiable}.
+ */
+interface MapState<K, V> {
+  /** hash code -> the nodes that landed on it. A JS Map, so any integer works as a bucket index. */
+  buckets: Map<number, Node<K, V>[]>;
+  head: Node<K, V> | null;
+  tail: Node<K, V> | null;
+  size: number;
+  /**
+   * Bumped on every *structural* change — an entry appearing or disappearing. Replacing the value under an
+   * existing key is not structural and deliberately does not bump it, which is Java's rule too.
+   */
+  modCount: number;
+}
+
+/**
  * Java's `HashMap`, keyed on `hashCode()` and `equals()` rather than on reference identity.
  *
  * This is the thing JavaScript's built-in `Map` cannot do. `new Map()` compares keys with SameValueZero, so two
@@ -71,19 +96,17 @@ interface Node<K, V> {
  *
  * Iteration is in insertion order, which makes it Java's `LinkedHashMap` rather than its `HashMap` — `HashMap`
  * leaves the order unspecified, and an unspecified order that happens to be stable is a trap waiting for the
- * first person who depends on it.
+ * first person who depends on it. Iterators are fail-fast: modifying the map mid-iteration throws
+ * {@link ConcurrentModificationException} rather than quietly skipping entries.
  *
  * IMPORTANT: as in Java, a key whose `hashCode()` disagrees with its `equals()` will be lost in the map. If you
- * override `equals` on a {@link JavaObject}, you must override `hashCode` too — {@link hashAll} exists to make
- * that a one-liner. Mutating a key after inserting it moves its hash out from under the map, with the same
- * result.
+ * override `equals` on a {@link JavaObject}, you must override `hashCode` too — `hashAll` exists to make that a
+ * one-liner, and the map warns once per class when it spots the mistake. Mutating a key after inserting it
+ * moves its hash out from under the map, with the same result.
  */
-export class JavaMap<K, V> extends JavaObject {
-  /** hash code -> the nodes that landed on it. A JS Map, so any integer works as a bucket index. */
-  readonly #buckets = new Map<number, Node<K, V>[]>();
-  #head: Node<K, V> | null = null;
-  #tail: Node<K, V> | null = null;
-  #size = 0;
+export class JavaMap<K, V> extends JavaObject implements Iterable<[K, V]>, Serializable {
+  #state: MapState<K, V>;
+  #readOnly = false;
 
   /**
    * @param entries initial contents, as `[key, value]` pairs. Accepts anything iterable, including another
@@ -91,6 +114,7 @@ export class JavaMap<K, V> extends JavaObject {
    */
   constructor(entries?: Iterable<readonly [K, V]>) {
     super();
+    this.#state = { buckets: new Map<number, Node<K, V>[]>(), head: null, tail: null, size: 0, modCount: 0 };
     if (entries) {
       for (const [key, value] of entries) {
         this.put(key, value);
@@ -98,8 +122,41 @@ export class JavaMap<K, V> extends JavaObject {
     }
   }
 
+  /**
+   * Java 9's `Map.of(...)`: an immutable map, refusing every mutator.
+   *
+   * A frozen copy rather than a view — the arguments are values, so there is nothing to stay live against.
+   * Java's variadic form takes alternating keys and values, which TypeScript cannot type; these are pairs.
+   */
+  public static of<K, V>(...entries: readonly (readonly [K, V])[]): JavaMap<K, V> {
+    const map = new JavaMap<K, V>(entries);
+    map.#readOnly = true;
+    return map;
+  }
+
+  /**
+   * Java's `Collections.unmodifiableMap`: a read-only *view*, not a copy.
+   *
+   * The view shares the original's storage, so later changes to the original show through. That is Java's
+   * behaviour and the usual source of surprise with it: handing out an unmodifiable view protects you from
+   * your caller, not your caller from you. Use {@link JavaMap.of} or the copy constructor when you want a
+   * snapshot nobody can move.
+   */
+  public static unmodifiable<K, V>(map: JavaMap<K, V>): JavaMap<K, V> {
+    const view = new JavaMap<K, V>();
+    view.#state = map.#state;
+    view.#readOnly = true;
+    return view;
+  }
+
+  #requireMutable(operation: string): void {
+    if (this.#readOnly) {
+      unsupported(operation, "this map is unmodifiable");
+    }
+  }
+
   #findNode(key: K): Node<K, V> | null {
-    const bucket = this.#buckets.get(hashCodeOf(key));
+    const bucket = this.#state.buckets.get(hashCodeOf(key));
     if (bucket === undefined) {
       return null;
     }
@@ -113,13 +170,14 @@ export class JavaMap<K, V> extends JavaObject {
   }
 
   #unlink(node: Node<K, V>): void {
+    const state = this.#state;
     if (node.before === null) {
-      this.#head = node.after;
+      state.head = node.after;
     } else {
       node.before.after = node.after;
     }
     if (node.after === null) {
-      this.#tail = node.before;
+      state.tail = node.before;
     } else {
       node.after.before = node.before;
     }
@@ -127,12 +185,23 @@ export class JavaMap<K, V> extends JavaObject {
     node.before = null;
   }
 
+  /** removes the node from its bucket and from the insertion-order chain, and counts the structural change */
+  #deleteNode(hash: number, bucket: Node<K, V>[], index: number, node: Node<K, V>): void {
+    bucket.splice(index, 1);
+    if (bucket.length === 0) {
+      this.#state.buckets.delete(hash);
+    }
+    this.#unlink(node);
+    this.#state.size--;
+    this.#state.modCount++;
+  }
+
   public size(): number {
-    return this.#size;
+    return this.#state.size;
   }
 
   public isEmpty(): boolean {
-    return this.#size === 0;
+    return this.#state.size === 0;
   }
 
   public containsKey(key: K): boolean {
@@ -141,7 +210,7 @@ export class JavaMap<K, V> extends JavaObject {
 
   /** Linear, as Java's is — the map indexes keys, not values. */
   public containsValue(value: V): boolean {
-    for (let node = this.#head; node !== null; node = node.after) {
+    for (let node = this.#state.head; node !== null; node = node.after) {
       if (equalsOf(value, node.value)) {
         return true;
       }
@@ -179,30 +248,35 @@ export class JavaMap<K, V> extends JavaObject {
    * @returns the value previously mapped to this key, or `null` if there was none.
    */
   public put(key: K, value: V): V | null {
+    this.#requireMutable("put");
     const hash = hashCodeOf(key);
-    let bucket = this.#buckets.get(hash);
+    let bucket = this.#state.buckets.get(hash);
     if (bucket === undefined) {
       bucket = [];
-      this.#buckets.set(hash, bucket);
+      this.#state.buckets.set(hash, bucket);
     }
     for (const node of bucket) {
       if (equalsOf(key, node.key)) {
         const previous = node.value;
         node.value = value;
         // Java keeps the key already in the map and discards the one just passed in. They are `equals`, so it
-        // makes no difference to lookups, but it does decide which one `keySet()` hands back.
+        // makes no difference to lookups, but it does decide which one `keySet()` hands back. Not structural,
+        // so modCount stays put and an in-flight iterator is undisturbed.
         return previous;
       }
     }
-    const node: Node<K, V> = { hash, key, value, before: this.#tail, after: null };
-    if (this.#tail === null) {
-      this.#head = node;
+    checkHashContract(key);
+    const node: Node<K, V> = { hash, key, value, before: this.#state.tail, after: null };
+    if (this.#state.tail === null) {
+      this.#state.head = node;
     } else {
-      this.#tail.after = node;
+      this.#state.tail.after = node;
     }
-    this.#tail = node;
+    this.#state.tail = node;
     bucket.push(node);
-    this.#size++;
+    this.#state.size++;
+    this.#state.modCount++;
+    checkCollisionChain(bucket.length, key);
     return null;
   }
 
@@ -210,6 +284,7 @@ export class JavaMap<K, V> extends JavaObject {
    * @returns the existing value if the key was already mapped to a non-null one, `null` if the entry was written.
    */
   public putIfAbsent(key: K, value: V): V | null {
+    this.#requireMutable("putIfAbsent");
     const node = this.#findNode(key);
     if (node !== null && node.value !== null) {
       return node.value;
@@ -219,7 +294,8 @@ export class JavaMap<K, V> extends JavaObject {
   }
 
   public putAll(entries: Iterable<readonly [K, V]>): void {
-    for (const [key, value] of entries) {
+    this.#requireMutable("putAll");
+    for (const [key, value] of [...entries]) {
       this.put(key, value);
     }
   }
@@ -229,6 +305,7 @@ export class JavaMap<K, V> extends JavaObject {
    * @returns the value now mapped to the key
    */
   public computeIfAbsent(key: K, supplier: (key: K) => V): V {
+    this.#requireMutable("computeIfAbsent");
     const node = this.#findNode(key);
     if (node !== null && node.value !== null) {
       return node.value;
@@ -239,89 +316,253 @@ export class JavaMap<K, V> extends JavaObject {
   }
 
   /**
-   * @returns the value that was removed, or `null` if the key was absent.
+   * Recomputes the value for a key that is already mapped to a non-null one. Absent keys are left alone and the
+   * remapper is not called.
+   * @returns the new value, or `null` if the key was absent or the remapper asked for removal
    */
-  public remove(key: K): V | null {
-    const hash = hashCodeOf(key);
-    const bucket = this.#buckets.get(hash);
-    if (bucket === undefined) {
+  public computeIfPresent(key: K, remapper: (key: K, value: V) => V | null | undefined): V | null {
+    this.#requireMutable("computeIfPresent");
+    const node = this.#findNode(key);
+    if (node === null || node.value === null) {
       return null;
+    }
+    const newValue = remapper(key, node.value);
+    if (newValue === null || newValue === undefined) {
+      this.remove(key);
+      return null;
+    }
+    node.value = newValue;
+    return newValue;
+  }
+
+  /**
+   * Recomputes the value for a key whether or not it is present — the remapper receives `null` when it is not.
+   *
+   * Returning null (or undefined) from the remapper removes the entry, which is how Java's `compute` expresses
+   * "on reflection, this key should not be here".
+   *
+   * @returns the new value, or `null` if the entry was removed or never created
+   */
+  public compute(key: K, remapper: (key: K, value: V | null) => V | null | undefined): V | null {
+    this.#requireMutable("compute");
+    const node = this.#findNode(key);
+    const newValue = remapper(key, node === null ? null : node.value);
+    if (newValue === null || newValue === undefined) {
+      if (node !== null) {
+        this.remove(key);
+      }
+      return null;
+    }
+    this.put(key, newValue);
+    return newValue;
+  }
+
+  /**
+   * Java's `merge`: insert the value if the key is absent, otherwise combine the old and new values.
+   *
+   * The tidy way to accumulate. A word-frequency count is `counts.merge(word, 1, (a, b) => a + b)` rather than
+   * a get, a null check and a put.
+   *
+   * @param value the value to insert if the key is absent, and the remapper's second argument if it is not
+   * @param remapper receives (existing, value) and returns the combined value, or null to remove the entry
+   * @returns the new value, or `null` if the entry was removed
+   */
+  public merge(key: K, value: V, remapper: (existing: V, value: V) => V | null | undefined): V | null {
+    this.#requireMutable("merge");
+    const node = this.#findNode(key);
+    const newValue = node === null || node.value === null ? value : remapper(node.value, value);
+    if (newValue === null || newValue === undefined) {
+      if (node !== null) {
+        this.remove(key);
+      }
+      return null;
+    }
+    this.put(key, newValue);
+    return newValue;
+  }
+
+  /**
+   * Replaces the value for a key that is already present. Unlike {@link put}, this never creates an entry.
+   *
+   * The three-argument form replaces only if the current value matches the one you expect — Java's
+   * compare-and-set, useful when something else may have changed the entry since you looked.
+   *
+   * @returns the previous value (two-argument form), or whether the replacement happened (three-argument form)
+   */
+  public replace(key: K, value: V): V | null;
+  public replace(key: K, expected: V, replacement: V): boolean;
+  public replace(key: K, value: V, ...replacement: readonly [V] | readonly []): V | null | boolean {
+    this.#requireMutable("replace");
+    const node = this.#findNode(key);
+    if (replacement.length === 1) {
+      if (node === null || !equalsOf(node.value, value)) {
+        return false;
+      }
+      node.value = replacement[0];
+      return true;
+    }
+    if (node === null) {
+      return null;
+    }
+    const previous = node.value;
+    node.value = value;
+    return previous;
+  }
+
+  /**
+   * Rewrites every value in place.
+   *
+   * NOTE: takes `(value, key)`, matching {@link forEach} and JavaScript, where Java's `replaceAll` takes
+   * `(key, value)`.
+   */
+  public replaceAll(operator: (value: V, key: K) => V): void {
+    this.#requireMutable("replaceAll");
+    for (let node = this.#state.head; node !== null; node = node.after) {
+      node.value = operator(node.value, node.key);
+    }
+  }
+
+  /**
+   * Removes an entry, unconditionally or only when it holds the value you expect.
+   *
+   * @returns the value that was removed (one-argument form), or whether anything was removed (two-argument form)
+   */
+  public remove(key: K): V | null;
+  public remove(key: K, value: V): boolean;
+  public remove(key: K, ...expected: readonly [V] | readonly []): V | null | boolean {
+    this.#requireMutable("remove");
+    const hash = hashCodeOf(key);
+    const bucket = this.#state.buckets.get(hash);
+    if (bucket === undefined) {
+      return expected.length === 1 ? false : null;
     }
     for (let i = 0; i < bucket.length; i++) {
       const node = bucket[i];
       if (!equalsOf(key, node.key)) {
         continue;
       }
-      bucket.splice(i, 1);
-      if (bucket.length === 0) {
-        this.#buckets.delete(hash);
+      if (expected.length === 1) {
+        if (!equalsOf(node.value, expected[0])) {
+          return false;
+        }
+        this.#deleteNode(hash, bucket, i, node);
+        return true;
       }
-      this.#unlink(node);
-      this.#size--;
+      this.#deleteNode(hash, bucket, i, node);
       return node.value;
     }
-    return null;
+    return expected.length === 1 ? false : null;
   }
 
   public clear(): void {
-    this.#buckets.clear();
-    this.#head = null;
-    this.#tail = null;
-    this.#size = 0;
+    this.#requireMutable("clear");
+    if (this.#state.size === 0) {
+      return;
+    }
+    this.#state.buckets.clear();
+    this.#state.head = null;
+    this.#state.tail = null;
+    this.#state.size = 0;
+    this.#state.modCount++;
   }
 
   /**
-   * NOTE: a snapshot, not Java's live view. Adding to the returned set does not touch this map, and removing a
-   * key from this map does not shrink a set already handed out.
+   * Java's `keySet()`: a live, write-through view of the keys.
+   *
+   * Removing from it removes from the map, and the map's own changes show through it. Adding is refused with
+   * {@link UnsupportedOperationException} — there would be no value to map the new key to — which is exactly
+   * what Java's view does.
    */
-  public keySet(): JavaSet<K> {
-    return new JavaSet<K>(this.keys());
+  public keySet(): JavaAbstractSet<K> {
+    return new KeySetView<K, V>(this);
   }
 
-  /** NOTE: a snapshot, and an array rather than Java's `Collection<V>` — there is no JavaList to return yet. */
-  public values(): V[] {
-    return [...this.valueIterator()];
+  /**
+   * Java's `values()`: a live, write-through view of the values.
+   *
+   * A collection rather than a set, because values may repeat. Removing a value removes the first entry
+   * holding it; adding is refused, since there would be no key to file it under.
+   */
+  public values(): JavaCollection<V> {
+    return new ValuesView<K, V>(this);
   }
 
-  /** NOTE: a snapshot, not Java's live view. See {@link JavaMapEntry}. */
-  public entrySet(): JavaSet<JavaMapEntry<K, V>> {
-    const entries = new JavaSet<JavaMapEntry<K, V>>();
-    for (let node = this.#head; node !== null; node = node.after) {
-      entries.add(new JavaMapEntry<K, V>(node.key, node.value));
-    }
-    return entries;
+  /**
+   * Java's `entrySet()`: a live, write-through view of the entries.
+   *
+   * The {@link JavaMapEntry} objects it yields are snapshots — Java's support `setValue`, these do not — but
+   * the view itself tracks the map, and removing an entry from it removes that entry from the map, and only
+   * if the value still matches.
+   */
+  public entrySet(): JavaAbstractSet<JavaMapEntry<K, V>> {
+    return new EntrySetView<K, V>(this);
   }
 
+  /**
+   * Fail-fast, as Java's iterators are: a structural change mid-iteration throws
+   * {@link ConcurrentModificationException} rather than silently skipping entries or looping forever.
+   * Replacing the value under an existing key is not structural and will not trip it.
+   *
+   * As in Java, modifying while consuming the *final* element goes unnoticed — the walk has already finished by
+   * the time the change lands.
+   */
   public *keys(): IterableIterator<K> {
-    for (let node = this.#head; node !== null; node = node.after) {
+    const expected = this.#state.modCount;
+    for (let node = this.#state.head; node !== null; node = node.after) {
+      if (this.#state.modCount !== expected) {
+        throw new ConcurrentModificationException("The map was modified while it was being iterated.");
+      }
       yield node.key;
     }
   }
 
+  /** The values, in insertion order. Fail-fast, like {@link keys}. */
   public *valueIterator(): IterableIterator<V> {
-    for (let node = this.#head; node !== null; node = node.after) {
+    const expected = this.#state.modCount;
+    for (let node = this.#state.head; node !== null; node = node.after) {
+      if (this.#state.modCount !== expected) {
+        throw new ConcurrentModificationException("The map was modified while it was being iterated.");
+      }
       yield node.value;
+    }
+  }
+
+  /** The entries, in insertion order, as {@link JavaMapEntry} objects. Fail-fast, like {@link keys}. */
+  public *entries(): IterableIterator<JavaMapEntry<K, V>> {
+    const expected = this.#state.modCount;
+    for (let node = this.#state.head; node !== null; node = node.after) {
+      if (this.#state.modCount !== expected) {
+        throw new ConcurrentModificationException("The map was modified while it was being iterated.");
+      }
+      yield new JavaMapEntry<K, V>(node.key, node.value);
     }
   }
 
   /**
    * Iterates `[key, value]` pairs in insertion order, so a map round-trips through its own constructor and
-   * spreads into a plain JavaScript `Map`.
-   *
-   * NOTE: unlike Java, modifying the map mid-iteration does not throw a `ConcurrentModificationException`;
-   * there is no such exception in this library yet. Removing the current entry is safe — the walk resumes from
-   * where that entry pointed — but anything beyond that has unspecified results.
+   * spreads into a plain JavaScript `Map`. Fail-fast, like {@link keys}.
    */
   public *[Symbol.iterator](): IterableIterator<[K, V]> {
-    for (let node = this.#head; node !== null; node = node.after) {
+    const expected = this.#state.modCount;
+    for (let node = this.#state.head; node !== null; node = node.after) {
+      if (this.#state.modCount !== expected) {
+        throw new ConcurrentModificationException("The map was modified while it was being iterated.");
+      }
       yield [node.key, node.value];
     }
   }
 
+  /**
+   * NOTE: takes `(value, key, map)`, matching JavaScript's `Map.forEach`, where Java's `BiConsumer` takes
+   * `(key, value)`. Following JavaScript here because getting the two backwards is silent when K and V are
+   * both strings.
+   */
   public forEach(consumer: (value: V, key: K, map: JavaMap<K, V>) => void): void {
-    for (let node = this.#head; node !== null; node = node.after) {
-      // Java's `BiConsumer` takes (key, value); JavaScript's `Map.forEach` takes (value, key, map). This follows
-      // JavaScript, because getting the two backwards is silent when K and V are both strings.
+    const expected = this.#state.modCount;
+    for (let node = this.#state.head; node !== null; node = node.after) {
+      if (this.#state.modCount !== expected) {
+        throw new ConcurrentModificationException("The map was modified while it was being iterated.");
+      }
       consumer(node.value, node.key, this);
     }
   }
@@ -332,10 +573,10 @@ export class JavaMap<K, V> extends JavaObject {
    */
   public equals(other: any): boolean {
     return boilerplateEqualityCheck<JavaMap<K, V>>({ obj1: this, obj2: other }, (o1, o2) => {
-      if (!(#size in o2) || o1.#size !== o2.#size) {
+      if (!(#state in o2) || o1.#state.size !== o2.#state.size) {
         return false;
       }
-      for (let node = o1.#head; node !== null; node = node.after) {
+      for (let node = o1.#state.head; node !== null; node = node.after) {
         const otherNode = o2.#findNode(node.key);
         if (otherNode === null || !equalsOf(node.value, otherNode.value)) {
           return false;
@@ -354,7 +595,7 @@ export class JavaMap<K, V> extends JavaObject {
    */
   public hashCode(): number {
     let hash = 0;
-    for (let node = this.#head; node !== null; node = node.after) {
+    for (let node = this.#state.head; node !== null; node = node.after) {
       hash = (hash + (hashCodeOf(node.key) ^ hashCodeOf(node.value))) | 0;
     }
     return hash;
@@ -363,9 +604,144 @@ export class JavaMap<K, V> extends JavaObject {
   /** Java's `AbstractMap.toString`: `{a=1, b=2}`. */
   public toString(): string {
     const parts: string[] = [];
-    for (let node = this.#head; node !== null; node = node.after) {
+    for (let node = this.#state.head; node !== null; node = node.after) {
       parts.push(`${String(node.key)}=${String(node.value)}`);
     }
     return `{${parts.join(", ")}}`;
+  }
+
+  /**
+   * Serialises as an array of `[key, value]` pairs — the same shape {@link Symbol.iterator} yields, so it round
+   * trips back through the constructor.
+   *
+   * Deliberately not a JSON object: object keys can only be strings, and a map whose keys are numbers, nulls or
+   * JavaObjects would either collide or lose information on the way out.
+   */
+  public toJSON(): unknown {
+    return [...this];
+  }
+}
+
+/**
+ * Live view of a map's keys. Delegates everything to the map, holding no storage of its own, which is what
+ * makes it track the map rather than snapshot it.
+ */
+class KeySetView<K, V> extends JavaAbstractSet<K> {
+  readonly #map: JavaMap<K, V>;
+
+  constructor(map: JavaMap<K, V>) {
+    super();
+    this.#map = map;
+  }
+
+  public size(): number {
+    return this.#map.size();
+  }
+
+  public contains(value: K): boolean {
+    return this.#map.containsKey(value);
+  }
+
+  public add(_value: K): boolean {
+    return unsupported("add", "a key set has no value to map the new key to; put on the map instead");
+  }
+
+  public remove(value: K): boolean {
+    if (!this.#map.containsKey(value)) {
+      return false;
+    }
+    this.#map.remove(value);
+    return true;
+  }
+
+  public clear(): void {
+    this.#map.clear();
+  }
+
+  public [Symbol.iterator](): IterableIterator<K> {
+    return this.#map.keys();
+  }
+}
+
+/** Live view of a map's values. A collection rather than a set, because values may repeat. */
+class ValuesView<K, V> extends JavaCollection<V> {
+  readonly #map: JavaMap<K, V>;
+
+  constructor(map: JavaMap<K, V>) {
+    super();
+    this.#map = map;
+  }
+
+  public size(): number {
+    return this.#map.size();
+  }
+
+  public contains(value: V): boolean {
+    return this.#map.containsValue(value);
+  }
+
+  public add(_value: V): boolean {
+    return unsupported("add", "a values view has no key to file the new value under; put on the map instead");
+  }
+
+  /** Removes the first entry holding an equal value, matching Java's `values().remove(...)`. */
+  public remove(value: V): boolean {
+    for (const [key, candidate] of this.#map) {
+      if (equalsOf(value, candidate)) {
+        this.#map.remove(key);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public clear(): void {
+    this.#map.clear();
+  }
+
+  public [Symbol.iterator](): IterableIterator<V> {
+    return this.#map.valueIterator();
+  }
+}
+
+/** Live view of a map's entries. */
+class EntrySetView<K, V> extends JavaAbstractSet<JavaMapEntry<K, V>> {
+  readonly #map: JavaMap<K, V>;
+
+  constructor(map: JavaMap<K, V>) {
+    super();
+    this.#map = map;
+  }
+
+  public size(): number {
+    return this.#map.size();
+  }
+
+  public contains(value: JavaMapEntry<K, V>): boolean {
+    if (!JavaObject.isInstance(value) || !(value instanceof JavaMapEntry)) {
+      return false;
+    }
+    const key = value.getKey();
+    return this.#map.containsKey(key) && equalsOf(value.getValue(), this.#map.get(key));
+  }
+
+  public add(_value: JavaMapEntry<K, V>): boolean {
+    return unsupported("add", "an entry set cannot introduce entries; put on the map instead");
+  }
+
+  /** Removes only if the entry's value still matches what the map holds, as Java's entry set does. */
+  public remove(value: JavaMapEntry<K, V>): boolean {
+    if (!JavaObject.isInstance(value) || !(value instanceof JavaMapEntry)) {
+      return false;
+    }
+    return this.#map.remove(value.getKey(), value.getValue());
+  }
+
+  public clear(): void {
+    this.#map.clear();
+  }
+
+  public [Symbol.iterator](): IterableIterator<JavaMapEntry<K, V>> {
+    return this.#map.entries();
   }
 }

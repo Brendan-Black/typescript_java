@@ -1,7 +1,11 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
+import { JavaAbstractSet, JavaCollection } from "../src/collections/JavaCollection.js";
+import { JavaList } from "../src/collections/JavaList.js";
 import { JavaMap } from "../src/collections/JavaMap.js";
 import { JavaSet } from "../src/collections/JavaSet.js";
+import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
+import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
 import { hashAll } from "../src/fundamentals/Hashing.js";
 import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
 import { Optional } from "../src/fundamentals/Optional.js";
@@ -250,5 +254,86 @@ describe("JavaSet.toString", () => {
 
   it("uses the member's own toString", () => {
     assert.equal(new JavaSet<Point>([new Point(1, 2)]).toString(), "[(1,2)]");
+  });
+});
+
+describe("JavaSet in the collection hierarchy", () => {
+  it("is a JavaAbstractSet and a JavaCollection", () => {
+    const set = new JavaSet<number>([1]);
+    assert.ok(set instanceof JavaAbstractSet);
+    assert.ok(set instanceof JavaCollection);
+  });
+
+  it("inherits the bulk operations rather than reimplementing them", () => {
+    // they now live on JavaCollection; this just confirms the reparenting did not lose any
+    const set = new JavaSet<number>([1, 2, 3]);
+    assert.equal(set.containsAll([1, 2]), true);
+    assert.equal(set.addAll([4]), true);
+    assert.equal(set.removeAll([1]), true);
+    assert.deepEqual(set.toArray(), [2, 3, 4]);
+  });
+
+  it("keeps its own retainAll, which hashes rather than scanning", () => {
+    const set = new JavaSet<Point>([new Point(1, 2), new Point(3, 4)]);
+    assert.equal(set.retainAll([new Point(3, 4)]), true);
+    assert.deepEqual(set.toArray().map(String), ["(3,4)"]);
+  });
+
+  it("is not equal to a list holding the same elements", () => {
+    assert.equal(new JavaSet<number>([1, 2]).equals(new JavaList<number>([1, 2])), false);
+  });
+});
+
+describe("JavaSet fail-fast iteration", () => {
+  it("throws when a member is added mid-iteration", () => {
+    const set = new JavaSet<number>([1, 2, 3]);
+    assert.throws(() => {
+      for (const _value of set) {
+        set.add(99);
+      }
+    }, ConcurrentModificationException);
+  });
+
+  it("throws when a member is removed mid-iteration", () => {
+    const set = new JavaSet<number>([1, 2, 3]);
+    assert.throws(() => {
+      for (const value of set) {
+        if (value === 1) {
+          set.remove(3);
+        }
+      }
+    }, ConcurrentModificationException);
+  });
+
+  it("does not trip when a bulk operation snapshots first", () => {
+    const set = new JavaSet<number>([1, 2, 3]);
+    assert.doesNotThrow(() => set.removeAll(set));
+    assert.equal(set.isEmpty(), true);
+  });
+
+  it("does not trip on retainAll, which also snapshots", () => {
+    const set = new JavaSet<number>([1, 2, 3]);
+    assert.doesNotThrow(() => set.retainAll([2]));
+    assert.deepEqual(set.toArray(), [2]);
+  });
+});
+
+describe("JavaSet immutability", () => {
+  it("JavaSet.of refuses every mutator but allows every read", () => {
+    const set = JavaSet.of(1, 2);
+    assert.equal(set.contains(1), true);
+    assert.equal(set.size(), 2);
+    assert.deepEqual([...set], [1, 2]);
+    assert.throws(() => set.add(3), UnsupportedOperationException);
+    assert.throws(() => set.remove(1), UnsupportedOperationException);
+    assert.throws(() => set.clear(), UnsupportedOperationException);
+  });
+
+  it("unmodifiable is a live view of the original", () => {
+    const base = new JavaSet<number>([1]);
+    const view = JavaSet.unmodifiable(base);
+    base.add(2);
+    assert.deepEqual(view.toArray(), [1, 2]);
+    assert.throws(() => view.add(3), UnsupportedOperationException);
   });
 });

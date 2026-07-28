@@ -2,15 +2,17 @@
  * Java's Object class.
  * Mimics the behavior of Java's Object class in JavaScript.
  */
-export abstract class JavaObject extends Object {
+export abstract class JavaObject {
   #hash: number;
   /**
    * Constructor for JavaObject.
    * Initializes a unique hash code for the object.
    * This is a simple implementation and does not guarantee uniqueness across all instances.
+   *
+   * NOTE: this used to read `extends Object`, which did nothing. Every object in JavaScript already inherits
+   * from `Object.prototype`; naming it only made the declaration look like it meant something.
    */
   constructor() {
-    super();
     this.#hash = Math.floor(Math.random() * 0x7fffffff);
   }
 
@@ -51,6 +53,20 @@ export abstract class JavaObject extends Object {
     return this.#hash;
   }
 
+  /**
+   * `instanceof JavaObject`, but proof against a forgery.
+   *
+   * `Object.create(SomeSubclass.prototype)` satisfies `instanceof` while never having run a constructor, so it
+   * carries no private state and any method that reads a field throws a TypeError off it. Checking for `#hash`
+   * asks the only question that cannot be faked: did this object actually go through the constructor?
+   *
+   * Use this before calling methods on an object you were handed — an `equals` implementation, in particular,
+   * is required to answer rather than throw.
+   */
+  public static isInstance(value: unknown): value is JavaObject {
+    return value instanceof JavaObject && #hash in value;
+  }
+
 }
 
 /**
@@ -81,7 +97,7 @@ export function boilerplateEqualityCheck<T extends JavaObject>({ obj1, obj2 }: {
 		  const Fake = Object.create(JavaObject.prototype);
 		 */
   // so a callback that reads private state must brand-check first — see Optional#equals.
-  if (!(obj2 instanceof JavaObject) || Object.getPrototypeOf(obj1) !== Object.getPrototypeOf(obj2)) {
+  if (!JavaObject.isInstance(obj2) || Object.getPrototypeOf(obj1) !== Object.getPrototypeOf(obj2)) {
     return false;
   }
   // NOTE: deliberately no `hashCode()` comparison. Hash codes here are identity-based, so gating on them

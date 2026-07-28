@@ -91,6 +91,36 @@ describe("JavaObject.hashCode", () => {
   });
 });
 
+describe("JavaObject.isInstance", () => {
+  it("accepts a properly constructed JavaObject", () => {
+    assert.equal(JavaObject.isInstance(new Alpha()), true);
+    assert.equal(JavaObject.isInstance(new Point(1, 2)), true);
+  });
+
+  it("rejects a prototype-only forgery that instanceof would accept", () => {
+    const forged = Object.create(Point.prototype);
+    assert.ok(forged instanceof JavaObject, "instanceof is fooled by this");
+    assert.equal(JavaObject.isInstance(forged), false, "the private-field check is not");
+  });
+
+  it("rejects everything that is not a JavaObject at all", () => {
+    for (const other of [null, undefined, 0, "", {}, [], Symbol("s"), () => {}]) {
+      assert.equal(JavaObject.isInstance(other), false, `accepted ${String(other)}`);
+    }
+  });
+});
+
+describe("JavaObject inheritance", () => {
+  it("no longer extends Object, which did nothing", () => {
+    // every JavaScript object already inherits from Object.prototype; naming it only made the declaration look
+    // like it meant something
+    assert.equal(Object.getPrototypeOf(JavaObject), Function.prototype);
+    // the inherited behaviour is unchanged either way
+    assert.equal(Object.prototype.hasOwnProperty.call(new Alpha(), "x"), false);
+    assert.ok(new Alpha() instanceof Object);
+  });
+});
+
 describe("JavaObject.toString", () => {
   it("is stable across calls", () => {
     const a = new Alpha();

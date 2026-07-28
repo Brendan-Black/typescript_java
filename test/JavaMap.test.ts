@@ -1,7 +1,10 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
+import { JavaAbstractSet } from "../src/collections/JavaCollection.js";
 import { JavaMap, JavaMapEntry } from "../src/collections/JavaMap.js";
 import { JavaSet } from "../src/collections/JavaSet.js";
+import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
+import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
 import { hashAll } from "../src/fundamentals/Hashing.js";
 import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
 import { Optional } from "../src/fundamentals/Optional.js";
@@ -257,7 +260,7 @@ describe("JavaMap iteration", () => {
     map.put("a", 2);
     map.put("m", 3);
     assert.deepEqual([...map.keys()], ["z", "a", "m"]);
-    assert.deepEqual(map.values(), [1, 2, 3]);
+    assert.deepEqual(map.values().toArray(), [1, 2, 3]);
   });
 
   it("does not reorder when an existing key is overwritten", () => {
@@ -286,15 +289,17 @@ describe("JavaMap iteration", () => {
     assert.deepEqual(seen, [1, "a", true]);
   });
 
-  it("keySet, values and entrySet are snapshots, not live views", () => {
+  it("keySet, values and entrySet are live views of the map", () => {
     const map = new JavaMap<string, number>([["a", 1]]);
     const keys = map.keySet();
     const values = map.values();
     const entries = map.entrySet();
     map.put("b", 2);
-    assert.equal(keys.size(), 1);
-    assert.equal(values.length, 1);
-    assert.equal(entries.size(), 1);
+    assert.equal(keys.size(), 2);
+    assert.equal(values.size(), 2);
+    assert.equal(entries.size(), 2);
+    assert.deepEqual(keys.toArray(), ["a", "b"]);
+    assert.deepEqual(values.toArray(), [1, 2]);
   });
 
   it("entrySet yields comparable entries", () => {
@@ -308,10 +313,10 @@ describe("JavaMap iteration", () => {
     assert.equal(new JavaMapEntry("a", 1).hashCode(), new JavaMapEntry("a", 1).hashCode());
   });
 
-  it("keySet returns a JavaSet that itself keys by equality", () => {
+  it("keySet returns a set that itself keys by equality", () => {
     const map = new JavaMap<Point, string>([[new Point(1, 2), "a"]]);
     const keys = map.keySet();
-    assert.ok(keys instanceof JavaSet);
+    assert.ok(keys instanceof JavaAbstractSet);
     assert.equal(keys.contains(new Point(1, 2)), true);
   });
 
@@ -319,7 +324,7 @@ describe("JavaMap iteration", () => {
     const map = new JavaMap<string, number>();
     assert.deepEqual([...map], []);
     assert.deepEqual([...map.keys()], []);
-    assert.deepEqual(map.values(), []);
+    assert.deepEqual(map.values().toArray(), []);
   });
 });
 
@@ -377,5 +382,283 @@ describe("JavaMap.toString", () => {
 
   it("uses the key's own toString", () => {
     assert.equal(new JavaMap<Point, number>([[new Point(1, 2), 3]]).toString(), "{(1,2)=3}");
+  });
+});
+
+describe("JavaMap.compute and friends", () => {
+  it("compute receives the current value, or null when absent", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    const seen: (number | null)[] = [];
+    map.compute("a", (_key, value) => {
+      seen.push(value);
+      return 10;
+    });
+    map.compute("b", (_key, value) => {
+      seen.push(value);
+      return 20;
+    });
+    assert.deepEqual(seen, [1, null]);
+    assert.equal(map.get("a"), 10);
+    assert.equal(map.get("b"), 20);
+  });
+
+  it("compute removes the entry when the remapper returns null", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.equal(map.compute("a", () => null), null);
+    assert.equal(map.containsKey("a"), false);
+  });
+
+  it("compute does not create an entry when the remapper returns null for an absent key", () => {
+    const map = new JavaMap<string, number>();
+    assert.equal(map.compute("a", () => null), null);
+    assert.equal(map.size(), 0);
+  });
+
+  it("computeIfPresent skips absent keys entirely", () => {
+    const map = new JavaMap<string, number>();
+    let called = false;
+    assert.equal(
+      map.computeIfPresent("a", () => {
+        called = true;
+        return 1;
+      }),
+      null
+    );
+    assert.equal(called, false);
+    assert.equal(map.size(), 0);
+  });
+
+  it("computeIfPresent rewrites a present value, and removes on null", () => {
+    const map = new JavaMap<string, number>([["a", 1], ["b", 2]]);
+    assert.equal(map.computeIfPresent("a", (_key, value) => value * 10), 10);
+    assert.equal(map.get("a"), 10);
+    assert.equal(map.computeIfPresent("b", () => null), null);
+    assert.equal(map.containsKey("b"), false);
+  });
+
+  it("computeIfPresent does not disturb insertion order", () => {
+    const map = new JavaMap<string, number>([["a", 1], ["b", 2]]);
+    map.computeIfPresent("a", () => 99);
+    assert.deepEqual([...map.keys()], ["a", "b"]);
+  });
+});
+
+describe("JavaMap.merge", () => {
+  it("inserts when the key is absent, without calling the remapper", () => {
+    const map = new JavaMap<string, number>();
+    let called = false;
+    assert.equal(
+      map.merge("a", 1, () => {
+        called = true;
+        return 0;
+      }),
+      1
+    );
+    assert.equal(called, false);
+    assert.equal(map.get("a"), 1);
+  });
+
+  it("combines when the key is present", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.equal(map.merge("a", 5, (existing, value) => existing + value), 6);
+    assert.equal(map.get("a"), 6);
+  });
+
+  it("removes when the remapper returns null", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.equal(map.merge("a", 1, () => null), null);
+    assert.equal(map.containsKey("a"), false);
+  });
+
+  it("counts words in one line, which is what it is for", () => {
+    const counts = new JavaMap<string, number>();
+    for (const word of ["a", "b", "a", "c", "a"]) {
+      counts.merge(word, 1, (existing, value) => existing + value);
+    }
+    assert.equal(counts.get("a"), 3);
+    assert.equal(counts.get("b"), 1);
+  });
+});
+
+describe("JavaMap.replace", () => {
+  it("replaces a present key and returns the previous value", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.equal(map.replace("a", 2), 1);
+    assert.equal(map.get("a"), 2);
+  });
+
+  it("never creates an entry, unlike put", () => {
+    const map = new JavaMap<string, number>();
+    assert.equal(map.replace("a", 1), null);
+    assert.equal(map.size(), 0);
+  });
+
+  it("compare-and-sets in the three-argument form", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.equal(map.replace("a", 99, 2), false, "the expected value did not match");
+    assert.equal(map.get("a"), 1);
+    assert.equal(map.replace("a", 1, 2), true);
+    assert.equal(map.get("a"), 2);
+    assert.equal(map.replace("missing", 1, 2), false);
+  });
+
+  it("replaceAll rewrites every value, taking (value, key)", () => {
+    const map = new JavaMap<string, number>([["a", 1], ["b", 2]]);
+    map.replaceAll((value, key) => value * 10 + key.length);
+    assert.deepEqual([...map], [["a", 11], ["b", 21]]);
+  });
+});
+
+describe("JavaMap.remove with an expected value", () => {
+  it("removes only when the value matches", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.equal(map.remove("a", 99), false);
+    assert.equal(map.size(), 1);
+    assert.equal(map.remove("a", 1), true);
+    assert.equal(map.size(), 0);
+  });
+
+  it("reports false for an absent key", () => {
+    assert.equal(new JavaMap<string, number>().remove("a", 1), false);
+  });
+
+  it("compares the expected value with equals", () => {
+    const map = new JavaMap<string, Point>([["a", new Point(1, 2)]]);
+    assert.equal(map.remove("a", new Point(1, 2)), true);
+  });
+});
+
+describe("JavaMap fail-fast iteration", () => {
+  it("throws when an entry is added mid-iteration", () => {
+    const map = new JavaMap<string, number>([["a", 1], ["b", 2], ["c", 3]]);
+    assert.throws(() => {
+      for (const _entry of map) {
+        map.put("new", 9);
+      }
+    }, ConcurrentModificationException);
+  });
+
+  it("throws when an entry is removed mid-iteration", () => {
+    const map = new JavaMap<string, number>([["a", 1], ["b", 2], ["c", 3]]);
+    assert.throws(() => {
+      for (const [key] of map) {
+        if (key === "a") {
+          map.remove("c");
+        }
+      }
+    }, ConcurrentModificationException);
+  });
+
+  it("throws from keys, values, entries and forEach alike", () => {
+    const build = () => new JavaMap<string, number>([["a", 1], ["b", 2], ["c", 3]]);
+    for (const iterate of [
+      (m: JavaMap<string, number>) => {
+        for (const _k of m.keys()) m.remove("c");
+      },
+      (m: JavaMap<string, number>) => {
+        for (const _v of m.valueIterator()) m.remove("c");
+      },
+      (m: JavaMap<string, number>) => {
+        for (const _e of m.entries()) m.remove("c");
+      },
+      (m: JavaMap<string, number>) => m.forEach(() => m.remove("c")),
+    ]) {
+      assert.throws(() => iterate(build()), ConcurrentModificationException);
+    }
+  });
+
+  it("does not trip on replacing the value under an existing key", () => {
+    // not a structural modification, and Java does not count it as one either
+    const map = new JavaMap<string, number>([["a", 1], ["b", 2]]);
+    assert.doesNotThrow(() => {
+      for (const [key] of map) {
+        map.put(key, 99);
+      }
+    });
+    assert.deepEqual(map.values().toArray(), [99, 99]);
+  });
+
+  it("does not notice a change made while consuming the final element", () => {
+    // matches Java, where the walk has already finished by the time the change lands
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.doesNotThrow(() => {
+      for (const [key] of map) {
+        map.remove(key);
+      }
+    });
+    assert.equal(map.size(), 0);
+  });
+
+  it("lets a fresh iteration proceed after a modification", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    map.put("b", 2);
+    assert.deepEqual([...map.keys()], ["a", "b"]);
+  });
+});
+
+describe("JavaMap views write through", () => {
+  it("keySet removal removes from the map", () => {
+    const map = new JavaMap<string, number>([["a", 1], ["b", 2]]);
+    assert.equal(map.keySet().remove("a"), true);
+    assert.equal(map.containsKey("a"), false);
+    assert.equal(map.keySet().remove("a"), false);
+  });
+
+  it("keySet refuses add, because there is no value to map to", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.throws(() => map.keySet().add("b"), UnsupportedOperationException);
+  });
+
+  it("keySet clear empties the map", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    map.keySet().clear();
+    assert.equal(map.isEmpty(), true);
+  });
+
+  it("values removal drops the first entry holding that value", () => {
+    const map = new JavaMap<string, number>([["a", 1], ["b", 1]]);
+    assert.equal(map.values().remove(1), true);
+    assert.deepEqual([...map.keys()], ["b"]);
+    assert.equal(map.values().remove(99), false);
+  });
+
+  it("values refuses add", () => {
+    assert.throws(() => new JavaMap<string, number>().values().add(1), UnsupportedOperationException);
+  });
+
+  it("entrySet contains only entries whose value still matches", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    const entries = map.entrySet();
+    assert.equal(entries.contains(new JavaMapEntry("a", 1)), true);
+    assert.equal(entries.contains(new JavaMapEntry("a", 2)), false);
+    assert.equal(entries.contains(new JavaMapEntry("z", 1)), false);
+  });
+
+  it("entrySet removal is conditional on the value", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.equal(map.entrySet().remove(new JavaMapEntry("a", 2)), false);
+    assert.equal(map.size(), 1);
+    assert.equal(map.entrySet().remove(new JavaMapEntry("a", 1)), true);
+    assert.equal(map.size(), 0);
+  });
+
+  it("entrySet refuses add", () => {
+    assert.throws(() => new JavaMap<string, number>().entrySet().add(new JavaMapEntry("a", 1)), UnsupportedOperationException);
+  });
+
+  it("a key set view equals a plain set with the same members", () => {
+    // AbstractSet.equals is written against the Set interface, not against one class
+    const map = new JavaMap<string, number>([["a", 1], ["b", 2]]);
+    assert.equal(map.keySet().equals(new JavaSet<string>(["b", "a"])), true);
+    assert.equal(new JavaSet<string>(["b", "a"]).equals(map.keySet()), true);
+    assert.equal(map.keySet().hashCode(), new JavaSet<string>(["a", "b"]).hashCode());
+  });
+
+  it("views reflect a cleared map", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    const keys = map.keySet();
+    map.clear();
+    assert.equal(keys.isEmpty(), true);
+    assert.deepEqual(keys.toArray(), []);
   });
 });

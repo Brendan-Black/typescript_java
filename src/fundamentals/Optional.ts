@@ -8,23 +8,25 @@ export class Optional<T> extends JavaObject {
   #value: T | null;
 
   /**
-   *
-   * @param value your value!
+   * Java's `Optional.empty()` is a singleton, and so is this. Built lazily rather than in a static field
+   * initialiser, which would run while the class binding is still in its temporal dead zone.
    */
-  private constructor(value: T | null | undefined, internalArgs?: { nullable: boolean; mssg?: string }) {
+  static #EMPTY: Optional<any> | undefined;
+
+  /**
+   * @param value your value!
+   * @param internalArgs required, which is what keeps the factories the only way in. It previously defaulted to
+   * undefined and the constructor scolded you on the console for omitting it — a check that could never fire,
+   * since the constructor is private and TypeScript already rejects the call.
+   */
+  private constructor(value: T | null | undefined, internalArgs: { nullable: boolean; message?: string }) {
     super();
-    if (value === undefined) {
-      console.warn("undefined value passed to Optional, treating it as null");
-      value = null; // Java does not have a concept of "undefined" in the same way JavaScript does, so we treat it as null.
+    // Java has no concept of `undefined`; null is the only absence Optional models, so the two fold together.
+    const normalized = value === undefined ? null : value;
+    if (normalized === null && !internalArgs.nullable) {
+      throw new IllegalArgumentException(internalArgs.message ?? "Value cannot be null.");
     }
-    !internalArgs &&
-      console.error(
-        "you should not use this constructor directly, JavaScript demands for it to exist, but to properly mimic Java, please use `Optional.of(value)` or `Optional.ofNullable(value)` instead"
-      );
-    if (value === null && !internalArgs?.nullable) {
-      throw new IllegalArgumentException(internalArgs?.mssg ? internalArgs.mssg : "Value cannot be null.");
-    }
-    this.#value = value;
+    this.#value = normalized;
   }
 
   /**
@@ -41,20 +43,21 @@ export class Optional<T> extends JavaObject {
    * @param value
    * @returns
    */
-  public static ofNullable<T>(value: T | null): Optional<T> {
-    return new Optional<T>(value, { nullable: true });
+  public static ofNullable<T>(value: T | null | undefined): Optional<T> {
+    // Java's `ofNullable` returns `empty()` for null rather than a fresh instance, so this does too.
+    return value === null || value === undefined ? Optional.empty<T>() : new Optional<T>(value, { nullable: true });
   }
 
   /**
-   * Constructs an Optional that requires a non-null value.
-   * Throws an error if the value is null.
-   * This is similar to `Optional.of(value)` but allows for a custom message.
-   * @param value
-   * @param mssg
-   * @returns
+   * The empty Optional. Java's `Optional.empty()`.
+   *
+   * Every call returns the same instance — the value is null regardless of `T`, so there is nothing for
+   * separate instances to distinguish. That makes `Optional.empty() === Optional.empty()` true, which is
+   * incidental; compare with {@link equals}, not `===`.
    */
-  public static requireNonNull(value: any | null, mssg?: string): Optional<typeof value> {
-    return new Optional<typeof value>(value, { nullable: false, mssg });
+  public static empty<T>(): Optional<T> {
+    Optional.#EMPTY ??= new Optional<any>(null, { nullable: true });
+    return Optional.#EMPTY as Optional<T>;
   }
 
   /**
@@ -90,9 +93,9 @@ export class Optional<T> extends JavaObject {
    */
   public map<U>(mapper: (value: T) => U | null | undefined): Optional<U> {
     if (this.#value === null) {
-      return Optional.ofNullable<U>(null);
+      return Optional.empty<U>();
     }
-    return Optional.ofNullable<U>(mapper(this.#value) ?? null);
+    return Optional.ofNullable<U>(mapper(this.#value));
   }
 
   /**
@@ -106,7 +109,7 @@ export class Optional<T> extends JavaObject {
    */
   public flatMap<U>(mapper: (value: T) => Optional<U>): Optional<U> {
     if (this.#value === null) {
-      return Optional.ofNullable<U>(null);
+      return Optional.empty<U>();
     }
     const result = mapper(this.#value);
     if (!(result instanceof Optional)) {
@@ -121,10 +124,53 @@ export class Optional<T> extends JavaObject {
    */
   public filter(predicate: (value: T) => boolean): Optional<T> {
     if (this.#value === null || !predicate(this.#value as T)) {
-      return Optional.ofNullable<T>(null);
+      return Optional.empty<T>();
     }
     return this;
   }
+
+  /**
+   * Java's `Optional.or`: this Optional if it holds a value, otherwise whatever the supplier produces.
+   *
+   * The difference from {@link orElseGet} is what comes back — that one unwraps to a bare value, this one stays
+   * an Optional, so a chain of fallbacks can each legitimately come up empty.
+   *
+   * @param supplier called only when this Optional is empty; must return an Optional
+   * @throws {@link IllegalArgumentException} if the supplier returns something that is not an Optional
+   */
+  public or(supplier: () => Optional<T>): Optional<T> {
+    if (this.#value !== null) {
+      return this;
+    }
+    const result = supplier();
+    if (!(result instanceof Optional)) {
+      throw new IllegalArgumentException("The supplier passed to or must return an Optional.");
+    }
+    return result;
+  }
+
+  /**
+   * Java's `Optional.stream()`: a sequence of either one element or none.
+   *
+   * There is no Stream type here, so this yields an iterator — the JavaScript equivalent, and the thing that
+   * actually composes with the language. The point is the same one Java's makes: it turns a pile of Optionals
+   * into a flat sequence of the values that were actually there.
+   *
+   * ```ts
+   * const found = [maybeA, maybeB, maybeC].flatMap((o) => [...o]);
+   * ```
+   */
+  public *stream(): IterableIterator<T> {
+    if (this.#value !== null) {
+      yield this.#value;
+    }
+  }
+
+  /** Makes an Optional spreadable and usable in `for...of`, yielding either one value or none. See {@link stream}. */
+  public [Symbol.iterator](): IterableIterator<T> {
+    return this.stream();
+  }
+
   /**
    * equality is defined as the contained value being equal to the other value.
    * @param other
@@ -149,7 +195,7 @@ export class Optional<T> extends JavaObject {
    * This has to override {@link JavaObject.hashCode}, which is identity-based. `equals` here compares the
    * contained value, so leaving the inherited identity hash in place would mean two equal Optionals with
    * different hash codes: a broken contract, and an Optional that could never be found again once used as a
-   * {@link JavaMap} key.
+   * `JavaMap` key.
    */
   public hashCode(): number {
     return hashCodeOf(this.#value);
@@ -165,6 +211,14 @@ export class Optional<T> extends JavaObject {
    */
   public isPresent(): boolean {
     return this.#value !== null;
+  }
+
+  /**
+   * Java's `Optional.isEmpty()`, added in Java 11. The inverse of {@link isPresent}, and worth having for the
+   * same reason Java added it: `if (!o.isPresent())` reads as a double negative at a glance.
+   */
+  public isEmpty(): boolean {
+    return this.#value === null;
   }
 
   /**

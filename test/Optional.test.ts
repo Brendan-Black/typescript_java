@@ -237,3 +237,124 @@ describe("Optional.toString", () => {
     assert.match(empty().toString(), /^Optional\[null, typeof=object, hashcode=\d+\]$/);
   });
 });
+
+describe("Optional.empty", () => {
+  it("is empty", () => {
+    assert.equal(Optional.empty<number>().isPresent(), false);
+    assert.equal(Optional.empty<number>().isEmpty(), true);
+    assert.throws(() => Optional.empty<number>().get(), IllegalStateException);
+  });
+
+  it("is a singleton, as Java's is", () => {
+    assert.equal(Optional.empty<number>(), Optional.empty<string>());
+  });
+
+  it("is what ofNullable returns for an absent value", () => {
+    assert.equal(Optional.ofNullable<number>(null), Optional.empty<number>());
+    assert.equal(Optional.ofNullable<number>(undefined), Optional.empty<number>());
+  });
+
+  it("equals the stand-in the rest of these tests use", () => {
+    assert.equal(Optional.empty<number>().equals(empty<number>()), true);
+  });
+
+  it("is unequal to a present Optional, both ways", () => {
+    assert.equal(Optional.empty<number>().equals(Optional.of(5)), false);
+    assert.equal(Optional.of(5).equals(Optional.empty<number>()), false);
+  });
+
+  it("hashes to 0", () => {
+    assert.equal(Optional.empty<number>().hashCode(), 0);
+  });
+});
+
+describe("Optional.isEmpty", () => {
+  it("is the inverse of isPresent", () => {
+    assert.equal(Optional.of(5).isEmpty(), false);
+    assert.equal(Optional.of(5).isPresent(), true);
+    assert.equal(empty().isEmpty(), true);
+    assert.equal(empty().isPresent(), false);
+  });
+
+  it("treats falsy-but-present values as present", () => {
+    assert.equal(Optional.of(0).isEmpty(), false);
+    assert.equal(Optional.of("").isEmpty(), false);
+    assert.equal(Optional.of(false).isEmpty(), false);
+  });
+});
+
+describe("Optional.or", () => {
+  it("keeps the value when present, and skips the supplier", () => {
+    let called = false;
+    const result = Optional.of(5).or(() => {
+      called = true;
+      return Optional.of(9);
+    });
+    assert.equal(result.get(), 5);
+    assert.equal(called, false);
+  });
+
+  it("falls through to the supplier when empty", () => {
+    assert.equal(empty<number>().or(() => Optional.of(9)).get(), 9);
+  });
+
+  it("stays empty if the supplier is empty too, unlike orElseGet", () => {
+    const result = empty<number>().or(() => empty<number>());
+    assert.equal(result.isEmpty(), true);
+  });
+
+  it("chains through several fallbacks", () => {
+    const result = empty<string>()
+      .or(() => empty<string>())
+      .or(() => Optional.of("third"));
+    assert.equal(result.get(), "third");
+  });
+
+  it("throws IllegalArgumentException if the supplier does not return an Optional", () => {
+    assert.throws(() => empty<number>().or(() => 9 as any), IllegalArgumentException);
+  });
+});
+
+describe("Optional.stream", () => {
+  it("yields one element when present and none when empty", () => {
+    assert.deepEqual([...Optional.of(5).stream()], [5]);
+    assert.deepEqual([...empty<number>().stream()], []);
+  });
+
+  it("makes an Optional spreadable and for-of-able", () => {
+    assert.deepEqual([...Optional.of(5)], [5]);
+    assert.deepEqual([...empty<number>()], []);
+    const seen: number[] = [];
+    for (const value of Optional.of(7)) {
+      seen.push(value);
+    }
+    assert.deepEqual(seen, [7]);
+  });
+
+  it("flattens a pile of Optionals down to the values that were there", () => {
+    const maybes = [Optional.of(1), empty<number>(), Optional.of(3)];
+    assert.deepEqual(maybes.flatMap((o) => [...o]), [1, 3]);
+  });
+});
+
+describe("Optional constructor noise", () => {
+  it("says nothing on the console for ordinary usage", () => {
+    // regression: the constructor console.warn'd on every undefined and console.error'd about "not using the
+    // constructor directly" on a path a caller cannot even reach, since the constructor is private
+    const captured: string[] = [];
+    const warn = console.warn;
+    const error = console.error;
+    console.warn = (...args: unknown[]) => captured.push(args.map(String).join(" "));
+    console.error = (...args: unknown[]) => captured.push(args.map(String).join(" "));
+    try {
+      Optional.of(5);
+      Optional.ofNullable<number>(null);
+      Optional.ofNullable(undefined as unknown as null);
+      Optional.empty<number>();
+    } finally {
+      console.warn = warn;
+      console.error = error;
+    }
+    assert.deepEqual(captured, []);
+  });
+});
