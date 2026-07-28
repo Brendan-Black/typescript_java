@@ -239,7 +239,7 @@ export class JavaList<T> extends JavaCollection<T> {
    * Java's `AbstractList.equals`: same length, equal elements, in the same order. Order matters here and does
    * not for a set, which is the whole difference between the two.
    */
-  public override equals(other: any): boolean {
+  public override equals(other: unknown): boolean {
     if (this === other) {
       return true;
     }

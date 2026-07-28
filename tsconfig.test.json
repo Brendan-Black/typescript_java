@@ -5,6 +5,10 @@
 		"outDir": "./dist-test",
 		"declaration": false,
 		"declarationMap": false,
+		// isolatedDeclarations only means anything when declarations are being emitted, and tsc rejects the
+		// combination outright. The library build in tsconfig.json is where that flag does its work; tests are
+		// not part of the published surface.
+		"isolatedDeclarations": false,
 		"types": [
 			"node"
 		]

@@ -10,8 +10,13 @@ export class Optional<T> extends JavaObject {
   /**
    * Java's `Optional.empty()` is a singleton, and so is this. Built lazily rather than in a static field
    * initialiser, which would run while the class binding is still in its temporal dead zone.
+   *
+   * `never` rather than `any` as the element type: an empty Optional holds nothing, so there is no value whose
+   * type it could be. That is not pedantry — `Optional<any>` would let the singleton be handed out as any
+   * `Optional<T>` *and* would erase the caller's type on the way through, whereas `never` makes the widening
+   * cast in {@link empty} the one place the conversion happens.
    */
-  static #EMPTY: Optional<any> | undefined;
+  static #EMPTY: Optional<never> | undefined;
 
   /**
    * @param value your value!
@@ -56,7 +61,7 @@ export class Optional<T> extends JavaObject {
    * incidental; compare with {@link equals}, not `===`.
    */
   public static empty<T>(): Optional<T> {
-    Optional.#EMPTY ??= new Optional<any>(null, { nullable: true });
+    Optional.#EMPTY ??= new Optional<never>(null, { nullable: true });
     return Optional.#EMPTY as Optional<T>;
   }
 
@@ -177,7 +182,7 @@ export class Optional<T> extends JavaObject {
    * @returns
    */
 
-  public override equals(other: any): boolean {
+  public override equals(other: unknown): boolean {
     return boilerplateEqualityCheck<Optional<T>>({ obj1: this, obj2: other }, (o1, o2) => {
       // `Object.create(Optional.prototype)` passes the class check but carries no private state, and reading
       // `#value` off it would throw a TypeError. Java's contract says equals returns false for anything it

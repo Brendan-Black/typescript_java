@@ -30,7 +30,7 @@ export class JavaMapEntry<K, V> extends JavaObject implements Serializable {
     return this.#value;
   }
 
-  public override equals(other: any): boolean {
+  public override equals(other: unknown): boolean {
     return boilerplateEqualityCheck<JavaMapEntry<K, V>>({ obj1: this, obj2: other }, (o1, o2) => {
       if (!(#key in o2)) {
         return false;
@@ -572,7 +572,7 @@ export class JavaMap<K, V> extends JavaObject implements Iterable<[K, V]>, Seria
    * Java's `AbstractMap.equals`: same size, and every key maps to an equal value. Order is not part of it, so
    * two maps built by different insertion sequences are still equal.
    */
-  public override equals(other: any): boolean {
+  public override equals(other: unknown): boolean {
     return boilerplateEqualityCheck<JavaMap<K, V>>({ obj1: this, obj2: other }, (o1, o2) => {
       if (!(#state in o2) || o1.#state.size !== o2.#state.size) {
         return false;

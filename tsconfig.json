@@ -3,17 +3,42 @@
 		"target": "esnext",
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
-		"strict": true,
 		"lib": [
 			"ESNext",
 			"DOM"
 		],
-		"skipLibCheck": true,
-		"forceConsistentCasingInFileNames": true,
+		// `strict` is the umbrella: noImplicitAny, strictNullChecks, strictFunctionTypes, strictBindCallApply,
+		// strictPropertyInitialization, noImplicitThis, useUnknownInCatchVariables, alwaysStrict, and
+		// strictBuiltinIteratorReturn. The two below it are listed only because they predate that grouping in
+		// this file's history; they are already implied.
+		"strict": true,
 		"noImplicitAny": true,
 		"strictNullChecks": true,
-		"noImplicitOverride": true,
+		// every index read is `T | undefined` until proven otherwise — see fundamentals/Indexing.ts
 		"noUncheckedIndexedAccess": true,
+		// `foo?: string` no longer accepts an explicit `undefined`, so "absent" and "present but undefined" stay
+		// distinct. This library cares about that difference: Optional is built on it.
+		"exactOptionalPropertyTypes": true,
+		// an override must say so, and a typo'd name is a new method rather than a silent no-op
+		"noImplicitOverride": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"noPropertyAccessFromIndexSignature": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"allowUnreachableCode": false,
+		"allowUnusedLabels": false,
+		// Each file must be transpilable alone, and every exported signature must be explicit enough to emit a
+		// .d.ts without inference. For a published library that is a feature: the public API surface is written
+		// down rather than derived, so an unrelated edit cannot quietly reshape it.
+		"isolatedModules": true,
+		"isolatedDeclarations": true,
+		"verbatimModuleSyntax": true,
+		"noUncheckedSideEffectImports": true,
+		// this costs nothing here (the dependency surface is @types/node alone) and skipping it would mean
+		// type-checking against declarations that were never themselves checked
+		"skipLibCheck": false,
+		"forceConsistentCasingInFileNames": true,
 		"declaration": true,
 		"declarationMap": true,
 		"sourceMap": true,

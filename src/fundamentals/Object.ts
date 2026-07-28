@@ -32,7 +32,7 @@ export abstract class JavaObject {
    * @param other
    * @returns
    */
-  public equals(other: any): boolean {
+  public equals(other: unknown): boolean {
     return boilerplateEqualityCheck({ obj1: this, obj2: other });
   }
 
@@ -81,7 +81,7 @@ export abstract class JavaObject {
  * @param callback an optional callback that can be used to provide custom equality logic
  * @returns `true` if the objects are "equal", `false` otherwise
  */
-export function boilerplateEqualityCheck<T extends JavaObject>({ obj1, obj2 }: { obj1: JavaObject; obj2: any }, callback?: (o1: T, o2: T) => boolean): boolean {
+export function boilerplateEqualityCheck<T extends JavaObject>({ obj1, obj2 }: { obj1: JavaObject; obj2: unknown }, callback?: (o1: T, o2: T) => boolean): boolean {
   if (obj1 === obj2) {
     return true;
   }

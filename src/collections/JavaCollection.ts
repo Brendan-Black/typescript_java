@@ -124,7 +124,7 @@ export function unsupported(operation: string, reason: string): never {
  * holding the same members are equal, as they should be.
  */
 export abstract class JavaAbstractSet<T> extends JavaCollection<T> {
-  public override equals(other: any): boolean {
+  public override equals(other: unknown): boolean {
     if (this === other) {
       return true;
     }
