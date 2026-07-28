@@ -1,6 +1,7 @@
 import { IllegalArgumentException } from "../exceptions/IllegalArgumentException.js";
 import { IllegalStateException } from "../exceptions/IllegalStateException.js";
 import { TSJavaException } from "../exceptions/TSJavaException.js";
+import { hashCodeOf } from "./Hashing.js";
 import { boilerplateEqualityCheck, JavaObject } from "./Object.js";
 
 export class Optional<T> extends JavaObject {
@@ -10,7 +11,7 @@ export class Optional<T> extends JavaObject {
    *
    * @param value your value!
    */
-  constructor(value: T | null | undefined, internalArgs?: { nullable: boolean; mssg?: string }) {
+  private constructor(value: T | null | undefined, internalArgs?: { nullable: boolean; mssg?: string }) {
     super();
     if (value === undefined) {
       console.warn("undefined value passed to Optional, treating it as null");
@@ -140,6 +141,18 @@ export class Optional<T> extends JavaObject {
       }
       return o1.#value === o2.#value;
     });
+  }
+
+  /**
+   * Java's `Optional.hashCode()` is `Objects.hashCode(value)` — the contained value's hash, or 0 when empty.
+   *
+   * This has to override {@link JavaObject.hashCode}, which is identity-based. `equals` here compares the
+   * contained value, so leaving the inherited identity hash in place would mean two equal Optionals with
+   * different hash codes: a broken contract, and an Optional that could never be found again once used as a
+   * {@link JavaMap} key.
+   */
+  public hashCode(): number {
+    return hashCodeOf(this.#value);
   }
 
   public toString(): string {
