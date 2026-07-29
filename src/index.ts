@@ -30,6 +30,7 @@ export { ConcurrentModificationException } from "./exceptions/ConcurrentModifica
 export { IllegalArgumentException } from "./exceptions/IllegalArgumentException.js";
 export { IllegalStateException } from "./exceptions/IllegalStateException.js";
 export { IndexOutOfBoundsException } from "./exceptions/IndexOutOfBoundsException.js";
+export { NoSuchElementException } from "./exceptions/NoSuchElementException.js";
 export { NotImplementedException } from "./exceptions/NotImplementedException.js";
 export { NullPointerException } from "./exceptions/NullPointerException.js";
 export { UnsupportedOperationException } from "./exceptions/UnsupportedOperationException.js";

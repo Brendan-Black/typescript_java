@@ -4,6 +4,7 @@ import { ConcurrentModificationException } from "../src/exceptions/ConcurrentMod
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { IllegalStateException } from "../src/exceptions/IllegalStateException.js";
 import { IndexOutOfBoundsException } from "../src/exceptions/IndexOutOfBoundsException.js";
+import { NoSuchElementException } from "../src/exceptions/NoSuchElementException.js";
 import { NotImplementedException } from "../src/exceptions/NotImplementedException.js";
 import { NullPointerException } from "../src/exceptions/NullPointerException.js";
 import { RuntimeException } from "../src/exceptions/RuntimeException.js";
@@ -16,6 +17,7 @@ const CONCRETE = [
   IllegalArgumentException,
   IllegalStateException,
   IndexOutOfBoundsException,
+  NoSuchElementException,
   NotImplementedException,
   NullPointerException,
   UnsupportedOperationException,

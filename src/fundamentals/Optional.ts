@@ -1,5 +1,6 @@
 import { IllegalArgumentException } from "../exceptions/IllegalArgumentException.js";
-import { IllegalStateException } from "../exceptions/IllegalStateException.js";
+import { NoSuchElementException } from "../exceptions/NoSuchElementException.js";
+import { NullPointerException } from "../exceptions/NullPointerException.js";
 import { TSJavaException } from "../exceptions/TSJavaException.js";
 import { hashCodeOf } from "./Hashing.js";
 import { boilerplateEqualityCheck, JavaObject } from "./Object.js";
@@ -29,7 +30,11 @@ export class Optional<T> extends JavaObject {
     // Java has no concept of `undefined`; null is the only absence Optional models, so the two fold together.
     const normalized = value === undefined ? null : value;
     if (normalized === null && !internalArgs.nullable) {
-      throw new IllegalArgumentException(internalArgs.message ?? "Value cannot be null.");
+      // NullPointerException rather than IllegalArgumentException: Java's `Optional.of` is a one-liner around
+      // `Objects.requireNonNull(value)`, so a null there surfaces as an NPE. This is the only path that reaches
+      // here — `ofNullable` short-circuits to `empty()` and `empty()` passes `nullable: true` — so the whole
+      // check exists to serve `of`, and it should throw what `of` throws.
+      throw new NullPointerException(internalArgs.message ?? "Value cannot be null.");
     }
     this.#value = normalized;
   }
@@ -228,12 +233,17 @@ export class Optional<T> extends JavaObject {
   }
 
   /**
-   * Gets the value if not null, otherwise throws an error.
-   * @returns the value if present, throws  {@link IllegalStateException} otherwise.
+   * Gets the value if not null, otherwise throws.
+   *
+   * NOTE: this used to throw {@link IllegalStateException}. Java throws {@link NoSuchElementException}, with this
+   * exact message — the message was already right and only the class was wrong.
+   *
+   * @returns the value if present
+   * @throws {@link NoSuchElementException} if the Optional is empty
    */
   public get(): T {
     if (this.#value === null) {
-      throw new IllegalStateException("No value present");
+      throw new NoSuchElementException("No value present");
     }
     return this.#value as T;
   }
@@ -267,7 +277,10 @@ export class Optional<T> extends JavaObject {
    * This returns the value if present, otherwise throws an error.
    *
    * Exceptional for offensive programming.
-   * @param errorSupplier a function that returns an error to throw if no value is present.
+   *
+   * @param errorSupplier a function that returns an error to throw if no value is present. Omit it to get the
+   * same {@link NoSuchElementException} {@link get} throws, which is what Java's no-argument overload does.
+   * @throws {@link NoSuchElementException} if the Optional is empty and no supplier was given
    */
   public orElseThrow<E extends TSJavaException>(errorSupplier?: () => E): T {
     if (this.#value !== null) {
@@ -275,7 +288,7 @@ export class Optional<T> extends JavaObject {
     } else if (errorSupplier) {
       throw errorSupplier();
     } else {
-      throw new IllegalStateException("No value present");
+      throw new NoSuchElementException("No value present");
     }
   }
 

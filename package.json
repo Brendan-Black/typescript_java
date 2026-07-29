@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "A Java-style object-oriented programming experience in TypeScript.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Brendan-Black/typescript_java.git"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,6 +29,7 @@
     "pretest": "tsc -p tsconfig.test.json",
     "test": "node --test \"dist-test/test/*.test.js\"",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('dist-test',{recursive:true,force:true})\"",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run clean && npm test && npm run build"
   },
   "keywords": [

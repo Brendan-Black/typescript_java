@@ -1,8 +1,9 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
-import { IllegalStateException } from "../src/exceptions/IllegalStateException.js";
+import { NoSuchElementException } from "../src/exceptions/NoSuchElementException.js";
 import { NotImplementedException } from "../src/exceptions/NotImplementedException.js";
+import { NullPointerException } from "../src/exceptions/NullPointerException.js";
 import { Optional } from "../src/fundamentals/Optional.js";
 
 /** Java's `Optional.empty()` has no equivalent factory yet; this is the stand-in the tests use. */
@@ -13,8 +14,10 @@ describe("Optional factories", () => {
     assert.equal(Optional.of(5).get(), 5);
   });
 
-  it("of(null) throws IllegalArgumentException", () => {
-    assert.throws(() => Optional.of(null), IllegalArgumentException);
+  it("of(null) throws NullPointerException, as Java's does", () => {
+    // regression: this threw IllegalArgumentException. Java's `Optional.of` wraps `Objects.requireNonNull`,
+    // so a null there is an NPE.
+    assert.throws(() => Optional.of(null), NullPointerException);
   });
 
   it("of() accepts falsy values that are not null", () => {
@@ -121,8 +124,10 @@ describe("Optional.filter", () => {
 });
 
 describe("Optional unwrapping", () => {
-  it("get() throws IllegalStateException when empty", () => {
-    assert.throws(() => empty().get(), IllegalStateException);
+  it("get() throws NoSuchElementException when empty, as Java's does", () => {
+    // regression: this threw IllegalStateException. The message was already Java's; only the class was wrong.
+    assert.throws(() => empty().get(), NoSuchElementException);
+    assert.throws(() => empty().get(), { message: "No value present" });
   });
 
   it("orElse returns the fallback only when empty", () => {
@@ -149,8 +154,9 @@ describe("Optional unwrapping", () => {
     assert.throws(() => empty().orElseThrow(() => new NotImplementedException("nope")), NotImplementedException);
   });
 
-  it("orElseThrow defaults to IllegalStateException when empty", () => {
-    assert.throws(() => empty().orElseThrow(), IllegalStateException);
+  it("orElseThrow defaults to NoSuchElementException when empty, matching get()", () => {
+    assert.throws(() => empty().orElseThrow(), NoSuchElementException);
+    assert.throws(() => empty().orElseThrow(), { message: "No value present" });
   });
 });
 
@@ -242,7 +248,7 @@ describe("Optional.empty", () => {
   it("is empty", () => {
     assert.equal(Optional.empty<number>().isPresent(), false);
     assert.equal(Optional.empty<number>().isEmpty(), true);
-    assert.throws(() => Optional.empty<number>().get(), IllegalStateException);
+    assert.throws(() => Optional.empty<number>().get(), NoSuchElementException);
   });
 
   it("is a singleton, as Java's is", () => {
