@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
+import { JavaMap } from "../src/collections/JavaMap.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { NoSuchElementException } from "../src/exceptions/NoSuchElementException.js";
 import { NotImplementedException } from "../src/exceptions/NotImplementedException.js";
@@ -356,6 +357,55 @@ describe("Optional.stream", () => {
   it("flattens a pile of Optionals down to the values that were there", () => {
     const maybes = [Optional.of(1), empty<number>(), Optional.of(3)];
     assert.deepEqual(maybes.flatMap((o) => [...o]), [1, 3]);
+  });
+});
+
+describe("Optional serialization", () => {
+  it("serialises a present Optional as the bare value", () => {
+    assert.equal(JSON.stringify(Optional.of("ada")), '"ada"');
+    assert.equal(JSON.stringify(Optional.of(5)), "5");
+    assert.equal(JSON.stringify(Optional.of({ id: 1 })), '{"id":1}');
+  });
+
+  it("serialises an empty Optional as null", () => {
+    assert.equal(JSON.stringify(empty<string>()), "null");
+  });
+
+  it("leaves no trace of the wrapper on a DTO", () => {
+    const dto = { name: "ada", nickname: Optional.of("addie"), pronouns: empty<string>() };
+    assert.equal(JSON.stringify(dto), '{"name":"ada","nickname":"addie","pronouns":null}');
+  });
+
+  it("keeps the key for an empty Optional rather than dropping it", () => {
+    // the distinction that matters: "there is no nickname" must not read as "nicknames were never mentioned"
+    assert.deepEqual(Object.keys(JSON.parse(JSON.stringify({ nickname: empty<string>() }))), ["nickname"]);
+  });
+
+  it("survives being nested in an array", () => {
+    assert.equal(JSON.stringify([Optional.of(1), empty<number>(), Optional.of(3)]), "[1,null,3]");
+  });
+
+  it("returns a value rather than a rendering of one", () => {
+    // the Serializable contract: hand JSON.stringify the value, or it gets encoded a second time
+    assert.equal(typeof Optional.of({ id: 1 }).toJSON(), "object");
+    assert.equal(JSON.stringify({ outer: Optional.of({ id: 1 }) }), '{"outer":{"id":1}}');
+  });
+
+  it("composes with a value that is itself serialisable", () => {
+    const map = new JavaMap<string, number>([["a", 1]]);
+    assert.equal(JSON.stringify(Optional.of(map)), '[["a",1]]');
+  });
+
+  it("round trips through ofNullable, both present and empty", () => {
+    for (const original of [Optional.of("ada"), Optional.of(5), empty<string>()]) {
+      const restored = Optional.ofNullable(JSON.parse(JSON.stringify(original)) as unknown);
+      assert.ok(restored.equals(original), `${original.toString()} did not survive the round trip`);
+    }
+  });
+
+  it("cannot confuse an empty Optional with a present null, because there is no present null", () => {
+    assert.equal(JSON.stringify(Optional.ofNullable(null)), "null");
+    assert.throws(() => Optional.of(null), NullPointerException);
   });
 });
 

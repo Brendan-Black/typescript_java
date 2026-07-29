@@ -1,10 +1,11 @@
 import { IllegalArgumentException } from "../exceptions/IllegalArgumentException.js";
 import { NoSuchElementException } from "../exceptions/NoSuchElementException.js";
 import { NullPointerException } from "../exceptions/NullPointerException.js";
+import type { Serializable } from "../serialization/Serializable.js";
 import { hashCodeOf } from "./Hashing.js";
 import { boilerplateEqualityCheck, JavaObject } from "./Object.js";
 
-export class Optional<T> extends JavaObject {
+export class Optional<T> extends JavaObject implements Serializable {
   #value: T | null;
 
   /**
@@ -20,9 +21,7 @@ export class Optional<T> extends JavaObject {
 
   /**
    * @param value your value!
-   * @param internalArgs required, which is what keeps the factories the only way in. It previously defaulted to
-   * undefined and the constructor scolded you on the console for omitting it — a check that could never fire,
-   * since the constructor is private and TypeScript already rejects the call.
+   * @param internalArgs required rather than defaulted, which is what keeps the factories the only way in.
    */
   private constructor(value: T | null | undefined, internalArgs: { nullable: boolean; message?: string }) {
     super();
@@ -216,6 +215,45 @@ export class Optional<T> extends JavaObject {
   }
 
   /**
+   * Serialises as the contained value, or as `null` when empty — the Optional itself leaves no trace on the
+   * wire.
+   *
+   * ```ts
+   * JSON.stringify({ nickname: Optional.of("ada") }); // {"nickname":"ada"}
+   * JSON.stringify({ nickname: Optional.empty() });   // {"nickname":null}
+   * ```
+   *
+   * This is the shape Jackson's `Jdk8Module` produces for a Java DTO, and it is the only shape that makes
+   * Optional usable on a wire contract: a field's type is a property of the server's code, not of the JSON, so
+   * a consumer in another language must not have to know that this end wrapped it. Wrapping instead — some
+   * `{"present":false}` envelope — would leak the implementation into every client.
+   *
+   * The encoding is unambiguous in both directions because `null` is the one value an Optional cannot hold:
+   * {@link of} rejects it and {@link ofNullable} folds it to {@link empty}. So `null` on the wire always means
+   * empty, never "a present null", and `Optional.ofNullable(JSON.parse(json))` reconstructs the original —
+   * exactly, for any value JSON can represent on its own.
+   *
+   * An empty Optional serialises to `null` rather than vanishing from its parent object. Omitting the key is
+   * `JSON.stringify`'s behaviour for `undefined`, and it is the wrong default here: it collapses "the server
+   * says there is no nickname" into "the server did not mention nicknames", which a client cannot distinguish
+   * from a version skew. Callers who do want the key dropped can filter before serialising.
+   *
+   * A contained value that is itself serialisable has its own `toJSON` called here rather than being handed
+   * back raw. `JSON.stringify` consults `toJSON` once per slot: having taken this one, it serialises whatever
+   * comes back by its own rules and does not look for a second hook on it. Returning the value unexamined
+   * would therefore drop the value's encoding entirely — an `Optional<JavaMap>` would come out as `{}`, since
+   * a map keeps its contents in private fields. Nesting one slot deeper is safe without this, because the
+   * engine does re-check `toJSON` on each *property* of what it gets back.
+   */
+  public toJSON(): unknown {
+    const value: unknown = this.#value;
+    if (typeof value === "object" && value !== null && "toJSON" in value && typeof value.toJSON === "function") {
+      return (value as Serializable).toJSON();
+    }
+    return value;
+  }
+
+  /**
    * Checks if a value is present.
    * @returns {boolean} true if a value is present, false otherwise.
    */
@@ -233,9 +271,6 @@ export class Optional<T> extends JavaObject {
 
   /**
    * Gets the value if not null, otherwise throws.
-   *
-   * NOTE: this used to throw {@link IllegalStateException}. Java throws {@link NoSuchElementException}, with this
-   * exact message — the message was already right and only the class was wrong.
    *
    * @returns the value if present
    * @throws {@link NoSuchElementException} if the Optional is empty
@@ -277,18 +312,13 @@ export class Optional<T> extends JavaObject {
    *
    * Exceptional for offensive programming.
    *
-   * NOTE: the supplier used to be constrained to `TSJavaException`, which meant an application could not throw
-   * its own domain error out of an empty Optional without first reparenting it onto this library's hierarchy.
-   * Java's bound is `Throwable` — the root of everything throwable, not the subset the library happens to own —
-   * and `Error` is that root here.
+   * The supplier may return any `Error`, matching Java's bound of `Throwable` — the root of everything
+   * throwable, not the subset this library happens to own. An application throws its own domain error out of an
+   * empty Optional without reparenting it onto this hierarchy.
    *
    * `Error` rather than no bound at all: JavaScript will throw any value, but Java cannot throw a String and
    * neither should anything written in this style. A non-Error throw also loses the stack trace, which is the
    * one thing that makes the failure traceable.
-   *
-   * The type parameter went with it. It existed to carry Java's `throws X` clause, and TypeScript has no such
-   * clause — `E` appeared once, in the parameter, and never in the return type, so it constrained nothing that
-   * `() => Error` does not.
    *
    * @param errorSupplier a function returning the error to throw if no value is present. Omit it to get the
    * same {@link NoSuchElementException} {@link get} throws, which is what Java's no-argument overload does.

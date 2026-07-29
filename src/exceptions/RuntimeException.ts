@@ -6,9 +6,6 @@ import { TSJavaException } from "./TSJavaException.js";
  *
  * Catch this to catch anything the library raises without also catching an unrelated failure from elsewhere
  * in your program.
- *
- * NOTE: this was spelled `RunTimeException` until it was corrected here. Java has no capital T, and neither
- * does this any more.
  */
 export class RuntimeException extends TSJavaException {
   constructor(message?: string, options?: ErrorOptions) {

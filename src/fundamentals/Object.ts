@@ -9,8 +9,8 @@ export abstract class JavaObject {
    * Initializes a unique hash code for the object.
    * This is a simple implementation and does not guarantee uniqueness across all instances.
    *
-   * NOTE: this used to read `extends Object`, which did nothing. Every object in JavaScript already inherits
-   * from `Object.prototype`; naming it only made the declaration look like it meant something.
+   * The class extends nothing: every object in JavaScript already inherits from `Object.prototype`, so naming
+   * it in an `extends` clause would only make the declaration look like it meant something.
    */
   constructor() {
     this.#hash = Math.floor(Math.random() * 0x7fffffff);

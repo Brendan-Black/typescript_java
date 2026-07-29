@@ -17,8 +17,8 @@
  * const _check = User satisfies Deserializable<User>;
  * ```
  *
- * NOTE: this interface previously had its only member commented out. An interface with no members is
- * structurally satisfied by every value in the language, including `42`, so it read as a constraint while
+ * The member is not optional and must not be commented out. An interface with no members is structurally
+ * satisfied by every value in the language, including `42`, so an empty one reads as a constraint while
  * enforcing nothing — worse than a doc comment, which at least does not lie.
  *
  * @typeParam T the type `fromJSON` produces

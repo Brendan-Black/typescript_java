@@ -162,8 +162,8 @@ Everything descends from `TSJavaException` (standing in for `Throwable`) via `Ru
 
 ### Serialization
 
-`JavaList`, `JavaSet`, `JavaMap` and `JavaMapEntry` implement `Serializable`, so `JSON.stringify` produces
-something a caller would expect:
+`JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry` and `Optional` implement `Serializable`, so `JSON.stringify`
+produces something a caller would expect:
 
 ```ts
 JSON.stringify(new JavaMap([["a", 1], ["b", 2]])); // [["a",1],["b",2]]
@@ -173,6 +173,21 @@ JSON.stringify(JavaList.of(1, 2));                 // [1,2]
 A map serialises as pairs rather than as an object deliberately: JSON object keys can only be strings, so a map
 keyed on numbers, nulls or `JavaObject`s would either collide or lose information. The pair form round-trips
 straight back through the constructor.
+
+An `Optional` serialises as the value it holds, or as `null` when empty — the wrapper leaves no trace on the wire:
+
+```ts
+JSON.stringify({ nickname: Optional.of("addie") }); // {"nickname":"addie"}
+JSON.stringify({ nickname: Optional.empty() });     // {"nickname":null}
+```
+
+This is the shape Jackson's `Jdk8Module` produces for a Java DTO, and it is the only shape that makes `Optional`
+usable on a wire contract: whether a field is wrapped is a property of the server's code, not of the JSON, and a
+consumer in another language should not have to know. `null` is unambiguous in both directions, because it is the
+one value an `Optional` cannot hold — `of` rejects it and `ofNullable` folds it to `empty` — so
+`Optional.ofNullable(JSON.parse(json))` reconstructs the original exactly. An empty `Optional` keeps its key
+rather than dropping it, which is the difference between "there is no nickname" and "nicknames were never
+mentioned".
 
 `Deserializable<T>` types the *static* side. TypeScript cannot put a static member in an implemented interface, so
 a class opts in with `satisfies` at the point of declaration:
@@ -194,6 +209,7 @@ const _check = User satisfies Deserializable<User>;
 | `Set.of` with duplicates | throws | collapses them | The less surprising of the two |
 | `Collections.emptyList()` | shared singleton | fresh instance | |
 | `null` vs `undefined` | no `undefined` | folded together as "absent" | Except in `equalsOf`, where a map keeps them distinct rather than silently rewriting one of your keys |
+| `Optional` | not `Serializable` | serialises as the value, or `null` | Java's is a return type, not a field; here it is exactly what a DTO wants to hold, and the wire form matches what Jackson emits for one |
 
 Additions with no Java counterpart: `JavaMap.find` / `JavaList.find` (returning `Optional`), the whole `Contracts`
 module, and `NotImplementedException`.
@@ -201,8 +217,8 @@ module, and `NotImplementedException`.
 ## Roadmap
 
 - **DTO wire contracts** to and from backend frameworks (Spring/Jackson/raw Tomcat). Today's serialization layer is
-  two interfaces and `toJSON` on the collections; there is no framework-specific support, and `Optional` is not yet
-  serializable.
+  two interfaces and `toJSON` on the collections and `Optional`; there is no framework-specific support, and
+  nothing implements `Deserializable` yet — parsing back is `JSON.parse` plus a constructor.
 - **XML parsing** (JavaBeans). Not started.
 - Remaining `java.util` shapes: `Comparable`/`Comparator`, `TreeMap`/`TreeSet`, `Iterator` as an interface rather
   than a generator.

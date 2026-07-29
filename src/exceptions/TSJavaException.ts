@@ -11,8 +11,8 @@
 export abstract class TSJavaException extends Error {
   constructor(message?: string, options?: ErrorOptions) {
     super(message, options);
-    // matches the class name. It previously read "TypeScriptJavaException", which made three spellings of the
-    // same idea live at once — the class, this string, and the package name — and only this one was wrong.
+    // One spelling of the idea: the class, this string and the package name all say TSJava. Subclasses
+    // overwrite it with their own name, so a caller reading `error.name` always gets the class they caught.
     this.name = "TSJavaException";
   }
 }
