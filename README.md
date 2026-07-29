@@ -3,8 +3,6 @@
 A surprisingly nontrivial observation about the Java programming language is that it need not be restricted to its own specification.
 Indeed, by obeying proper programming principles, you can quite literally re-implement Java's semantics within a different language runtime.
 
-Will it be the most efficient? No. But that is not the point.
-
 The objective of this library is to provide a linguistic bridge between the frontend and the backend, and to supplement standard TypeScript
 development with the good practices that the nature of Java imposes on its developers by default.
 
