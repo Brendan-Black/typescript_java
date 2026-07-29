@@ -1,7 +1,6 @@
 import { IllegalArgumentException } from "../exceptions/IllegalArgumentException.js";
 import { NoSuchElementException } from "../exceptions/NoSuchElementException.js";
 import { NullPointerException } from "../exceptions/NullPointerException.js";
-import { TSJavaException } from "../exceptions/TSJavaException.js";
 import { hashCodeOf } from "./Hashing.js";
 import { boilerplateEqualityCheck, JavaObject } from "./Object.js";
 
@@ -278,11 +277,24 @@ export class Optional<T> extends JavaObject {
    *
    * Exceptional for offensive programming.
    *
-   * @param errorSupplier a function that returns an error to throw if no value is present. Omit it to get the
+   * NOTE: the supplier used to be constrained to `TSJavaException`, which meant an application could not throw
+   * its own domain error out of an empty Optional without first reparenting it onto this library's hierarchy.
+   * Java's bound is `Throwable` — the root of everything throwable, not the subset the library happens to own —
+   * and `Error` is that root here.
+   *
+   * `Error` rather than no bound at all: JavaScript will throw any value, but Java cannot throw a String and
+   * neither should anything written in this style. A non-Error throw also loses the stack trace, which is the
+   * one thing that makes the failure traceable.
+   *
+   * The type parameter went with it. It existed to carry Java's `throws X` clause, and TypeScript has no such
+   * clause — `E` appeared once, in the parameter, and never in the return type, so it constrained nothing that
+   * `() => Error` does not.
+   *
+   * @param errorSupplier a function returning the error to throw if no value is present. Omit it to get the
    * same {@link NoSuchElementException} {@link get} throws, which is what Java's no-argument overload does.
    * @throws {@link NoSuchElementException} if the Optional is empty and no supplier was given
    */
-  public orElseThrow<E extends TSJavaException>(errorSupplier?: () => E): T {
+  public orElseThrow(errorSupplier?: () => Error): T {
     if (this.#value !== null) {
       return this.#value as T;
     } else if (errorSupplier) {

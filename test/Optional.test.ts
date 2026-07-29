@@ -154,6 +154,22 @@ describe("Optional unwrapping", () => {
     assert.throws(() => empty().orElseThrow(() => new NotImplementedException("nope")), NotImplementedException);
   });
 
+  it("orElseThrow accepts any Error, not just this library's hierarchy", () => {
+    // regression: the supplier was constrained to TSJavaException, so an application could not throw its own
+    // domain error without reparenting it onto this library. Java's bound is Throwable.
+    class UserNotFound extends Error {
+      constructor(public readonly id: string) {
+        super(`no user ${id}`);
+        this.name = "UserNotFound";
+      }
+    }
+    assert.throws(() => empty().orElseThrow(() => new UserNotFound("ada")), UserNotFound);
+    assert.throws(() => empty().orElseThrow(() => new UserNotFound("ada")), { message: "no user ada" });
+
+    // built-ins too, which the old bound also refused
+    assert.throws(() => empty().orElseThrow(() => new TypeError("nope")), TypeError);
+  });
+
   it("orElseThrow defaults to NoSuchElementException when empty, matching get()", () => {
     assert.throws(() => empty().orElseThrow(), NoSuchElementException);
     assert.throws(() => empty().orElseThrow(), { message: "No value present" });
