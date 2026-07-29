@@ -54,7 +54,7 @@ both false for structurally equal objects; `JavaList.contains` and `JavaList.ind
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (365 tests); the serialization layer is one interface and little more. See
+hierarchy are complete and tested (404 tests); the serialization layer is one interface and little more. See
 [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -82,7 +82,7 @@ npm install github:Brendan-Black/typescript_java
 | `fundamentals/Comparator` | `Comparator`, `comparator`, `comparing`, `naturalOrder`, `reverseOrder`, `nullsFirst`, `nullsLast` |
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
 | `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry` |
-| `collections/Collections` | `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
+| `collections/Collections` | `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap`, `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
 | `exceptions` | `TSJavaException` and 10 subclasses |
 | `serialization` | `Serializable` (type only) |
 
@@ -136,6 +136,35 @@ const view = JavaList.unmodifiable(backing);
 backing.add(3);
 view.toString(); // "[1, 2, 3]" — changes to the original show through
 view.add(4);     // UnsupportedOperationException
+```
+
+`removeIf` is how you remove while walking a collection. Since iteration is generator-based there is no
+`Iterator.remove()` to reach for, and the fail-fast check above rules out doing it inside the loop:
+
+```ts
+users.removeIf((u) => u.expired); // rather than a ConcurrentModificationException
+```
+
+`Collections` carries Java's algorithms as well as its factories — `sort`, `max`, `min`, `binarySearch`,
+`reverse` and `swap`. Each comes in two forms, as Java's do: one taking a comparator, and one taking none and
+using natural order.
+
+```ts
+sort(names);                                       // natural order
+sort(users, comparing<User, number>((u) => u.age));
+max(scores);
+```
+
+The comparator-free form constrains its element type, so `sort(listOfPoints)` is a compile error rather than a
+`ClassCastException` partway through the sort. `binarySearch` reproduces Java's return value exactly, negative
+half included — a miss is `-(insertionPoint) - 1`, offset by one so that an insertion point of `0` stays
+distinguishable from a hit at index `0`:
+
+```ts
+const at = binarySearch(sorted, key);
+if (at < 0) {
+  sorted.addAt(-(at + 1), key); // keeps it sorted
+}
 ```
 
 ### Ordering
@@ -253,6 +282,8 @@ all the collections need — the pair form and the array form both feed straight
 | `Optional` | not `Serializable` | serialises as the value, or `null` | Java's is a return type, not a field; here it is exactly what a DTO wants to hold, and the wire form matches what Jackson emits for one |
 | `Comparator.thenComparing` | overloaded on `Comparator` and on a key extractor | `then` / `thenComparing` | A comparator is *structurally* a key extractor returning a number, so the overload would resolve silently and wrongly. Java needs a cast to break the same tie |
 | `List.sort` | any comparator, every element | same | `Array.prototype.sort` hoists `undefined` entries to the end without ever consulting the comparator; `JavaList.sort` sorts positions so that nothing is hidden from it |
+| `Collection.removeIf` | removes through the iterator, element by element | chooses from a snapshot, removes by value | There is no `Iterator.remove()` to build on here. The two differ only for a predicate that accepts one of two `equals` elements and not the other |
+| `Collections.max` / `min` | takes a `Collection` | takes any `Iterable` | An array or a plain `Set` is as good an input, and nothing in the algorithm needs more |
 
 Additions with no Java counterpart: `JavaMap.find` / `JavaList.find` (returning `Optional`), the whole `Contracts`
 module, and `NotImplementedException`.
@@ -263,8 +294,9 @@ module, and `NotImplementedException`.
   one interface and `toJSON` on the collections and `Optional`; there is no framework-specific support, and
   nothing types the parse direction — a contract for that belongs with the layer that needs it.
 - **XML parsing** (JavaBeans). Not started.
-- Remaining `java.util` shapes: `TreeMap`/`TreeSet` (the ordering they need is in place), `Iterator` as an
-  interface rather than a generator, and `Collections.sort`/`max`/`min`.
+- Remaining `java.util` shapes: `TreeMap`/`TreeSet` (the ordering they need is in place), and `Iterator` as an
+  interface rather than a generator — which is what would make `Iterator.remove()` expressible, though `removeIf`
+  now covers what that idiom is usually reaching for.
 
 ## Development
 

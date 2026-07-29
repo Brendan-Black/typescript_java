@@ -66,6 +66,28 @@ export abstract class JavaCollection<T> extends JavaObject implements Iterable<T
   }
 
   /**
+   * Java's `Collection.removeIf`: drops every element the predicate accepts.
+   *
+   * This is how you remove while walking a collection. Iteration here is fail-fast, so removing inside a
+   * `for...of` throws {@link ConcurrentModificationException}, and there is no `Iterator.remove()` to reach for
+   * because iteration is generator-based. `removeIf` sidesteps both by choosing from a snapshot and removing
+   * afterwards — which is what Java itself has recommended writing since 8.
+   *
+   * NOTE: the doomed elements are removed by value, so a predicate that accepts one of two `equals` elements but
+   * not the other is not honoured element-by-element. Java's iterator-based version is exact there. Keep the
+   * predicate a function of the value, as `equals` already assumes, and the two agree.
+   *
+   * @returns whether the collection changed
+   */
+  public removeIf(filter: (value: T) => boolean): boolean {
+    const doomed = this.toArray().filter(filter);
+    for (const value of doomed) {
+      this.remove(value);
+    }
+    return doomed.length > 0;
+  }
+
+  /**
    * Drops every element not present in `values`, leaving the intersection.
    *
    * O(n*m), as Java's `AbstractCollection.retainAll` is — the argument is only an Iterable, so there is nothing

@@ -24,12 +24,18 @@ export { JavaList } from "./collections/JavaList.js";
 export { JavaMap, JavaMapEntry } from "./collections/JavaMap.js";
 export { JavaSet } from "./collections/JavaSet.js";
 export {
+  binarySearch,
   emptyList,
   emptyMap,
   emptySet,
+  max,
+  min,
+  reverse,
   singleton,
   singletonList,
   singletonMap,
+  sort,
+  swap,
   unmodifiableList,
   unmodifiableMap,
   unmodifiableSet,
