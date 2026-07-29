@@ -53,8 +53,8 @@ both false for structurally equal objects; `JavaList.contains` and `JavaList.ind
 
 ## Status
 
-Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, and the exception hierarchy are
-complete and tested (315 tests); the serialization layer is two interfaces and little more. See
+Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
+hierarchy are complete and tested (365 tests); the serialization layer is one interface and little more. See
 [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -78,10 +78,12 @@ npm install github:Brendan-Black/typescript_java
 | `fundamentals/Hashing` | `hashCodeOf`, `equalsOf`, `hashAll` |
 | `fundamentals/Objects` | `requireNonNull`, `requireNonNullElse`, `requireNonNullElseGet`, `isNull`, `nonNull` |
 | `fundamentals/Optional` | `Optional` |
+| `fundamentals/Comparable` | `Comparable`, `NaturallyOrdered`, `compareOf` |
+| `fundamentals/Comparator` | `Comparator`, `comparator`, `comparing`, `naturalOrder`, `reverseOrder`, `nullsFirst`, `nullsLast` |
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
 | `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry` |
 | `collections/Collections` | `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
-| `exceptions` | `TSJavaException` and 9 subclasses |
+| `exceptions` | `TSJavaException` and 10 subclasses |
 | `serialization` | `Serializable` (type only) |
 
 Everything is re-exported from the package root.
@@ -136,6 +138,49 @@ view.toString(); // "[1, 2, 3]" — changes to the original show through
 view.add(4);     // UnsupportedOperationException
 ```
 
+### Ordering
+
+`Comparable` for a type that carries its own order, `Comparator` for one imposed from outside, and Java's
+combinators over them:
+
+```ts
+import { comparing, naturalOrder, nullsLast } from "typescript-java";
+
+users.sort(comparing<User, string>((u) => u.surname).thenComparing((u) => u.forename));
+names.sort(naturalOrder<string>());
+
+// a row whose score may be absent: the null-tolerance belongs on the *key*, not on the row
+rows.sort(comparing<Row, number | null>((r) => r.score, nullsLast(naturalOrder<number>())));
+```
+
+A `Comparator` here *is* a comparison function, so it goes straight into `JavaList.sort` or
+`Array.prototype.sort`; it just carries `reversed()`, `then()` and `thenComparing()` as well. `comparator(fn)`
+lifts a plain arrow function into one, which is the step Java's compiler does for you when it turns a lambda into
+a functional interface.
+
+`naturalOrder<T>()` will not compile unless `T` actually has an order — a primitive Java orders, a `Date`, or
+something implementing `Comparable`. That is the same guarantee Java gets from `<T extends Comparable<? super
+T>>`, and it turns a `ClassCastException` at sort time into a red squiggle.
+
+Underneath is `compareOf(a, b)`, which sits alongside `hashCodeOf` and `equalsOf` and reproduces Java's
+comparison semantics rather than JavaScript's:
+
+```ts
+[3, NaN, 1, 2].sort((a, b) => a - b);        // [3, NaN, 1, 2] — the comparator returns NaN, so nothing moves
+[3, NaN, 1, 2].sort(naturalOrder<number>()); // [1, 2, 3, NaN]
+```
+
+This is `Double.compare`: `NaN` sorts last and equals itself, `-0` sorts before `0`, and no subtraction is
+involved, so nothing overflows or loses precision. `String.compareTo` is likewise reproduced down to its exact
+return value, not just its sign. Natural order throws `NullPointerException` on an absent value rather than
+guessing where it belongs — `nullsFirst` and `nullsLast` are how an ordering acquires an opinion about absence,
+and both treat `undefined` as absent alongside `null`.
+
+Which comparator you wrap matters, and the throw is what tells you that you got it wrong. `nullsLast(comparing(f))`
+tolerates an absent *element*; `comparing(f, nullsLast(...))` tolerates an absent *key*. Wrapping the outer one
+when the key is what goes missing leaves `comparing` to call natural order on a `null` and raise before the
+wrapper is ever consulted.
+
 ### Contract checking
 
 Java has an IDE that generates `equals` and `hashCode` together, and a compiler warning when you write one without
@@ -156,7 +201,7 @@ colliding hashes for distinct values. Both are off with `setHashContractChecks(f
 Everything descends from `TSJavaException` (standing in for `Throwable`) via `RuntimeException`, so `catch (e) { if
 (e instanceof RuntimeException) ... }` catches anything this library raises and nothing else.
 
-`ConcurrentModificationException` · `IllegalArgumentException` · `IllegalStateException` ·
+`ClassCastException` · `ConcurrentModificationException` · `IllegalArgumentException` · `IllegalStateException` ·
 `IndexOutOfBoundsException` · `NoSuchElementException` · `NotImplementedException` · `NullPointerException` ·
 `UnsupportedOperationException`
 
@@ -206,6 +251,8 @@ all the collections need — the pair form and the array form both feed straight
 | `Collections.emptyList()` | shared singleton | fresh instance | |
 | `null` vs `undefined` | no `undefined` | folded together as "absent" | Except in `equalsOf`, where a map keeps them distinct rather than silently rewriting one of your keys |
 | `Optional` | not `Serializable` | serialises as the value, or `null` | Java's is a return type, not a field; here it is exactly what a DTO wants to hold, and the wire form matches what Jackson emits for one |
+| `Comparator.thenComparing` | overloaded on `Comparator` and on a key extractor | `then` / `thenComparing` | A comparator is *structurally* a key extractor returning a number, so the overload would resolve silently and wrongly. Java needs a cast to break the same tie |
+| `List.sort` | any comparator, every element | same | `Array.prototype.sort` hoists `undefined` entries to the end without ever consulting the comparator; `JavaList.sort` sorts positions so that nothing is hidden from it |
 
 Additions with no Java counterpart: `JavaMap.find` / `JavaList.find` (returning `Optional`), the whole `Contracts`
 module, and `NotImplementedException`.
@@ -216,8 +263,8 @@ module, and `NotImplementedException`.
   one interface and `toJSON` on the collections and `Optional`; there is no framework-specific support, and
   nothing types the parse direction — a contract for that belongs with the layer that needs it.
 - **XML parsing** (JavaBeans). Not started.
-- Remaining `java.util` shapes: `Comparable`/`Comparator`, `TreeMap`/`TreeSet`, `Iterator` as an interface rather
-  than a generator.
+- Remaining `java.util` shapes: `TreeMap`/`TreeSet` (the ordering they need is in place), `Iterator` as an
+  interface rather than a generator, and `Collections.sort`/`max`/`min`.
 
 ## Development
 

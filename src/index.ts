@@ -7,6 +7,17 @@ export {
   setHashContractChecks,
 } from "./fundamentals/Contracts.js";
 export { Optional } from "./fundamentals/Optional.js";
+export { compareOf } from "./fundamentals/Comparable.js";
+export type { Comparable, NaturallyOrdered } from "./fundamentals/Comparable.js";
+export {
+  comparator,
+  comparing,
+  naturalOrder,
+  nullsFirst,
+  nullsLast,
+  reverseOrder,
+} from "./fundamentals/Comparator.js";
+export type { Comparator } from "./fundamentals/Comparator.js";
 
 export { JavaAbstractSet, JavaCollection } from "./collections/JavaCollection.js";
 export { JavaList } from "./collections/JavaList.js";
@@ -26,6 +37,7 @@ export {
 
 export { TSJavaException } from "./exceptions/TSJavaException.js";
 export { RuntimeException } from "./exceptions/RuntimeException.js";
+export { ClassCastException } from "./exceptions/ClassCastException.js";
 export { ConcurrentModificationException } from "./exceptions/ConcurrentModificationException.js";
 export { IllegalArgumentException } from "./exceptions/IllegalArgumentException.js";
 export { IllegalStateException } from "./exceptions/IllegalStateException.js";

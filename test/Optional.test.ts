@@ -7,9 +7,6 @@ import { NotImplementedException } from "../src/exceptions/NotImplementedExcepti
 import { NullPointerException } from "../src/exceptions/NullPointerException.js";
 import { Optional } from "../src/fundamentals/Optional.js";
 
-/** Java's `Optional.empty()` has no equivalent factory yet; this is the stand-in the tests use. */
-const empty = <T>() => Optional.ofNullable<T>(null);
-
 describe("Optional factories", () => {
   it("of() holds the value", () => {
     assert.equal(Optional.of(5).get(), 5);
@@ -29,7 +26,11 @@ describe("Optional factories", () => {
   });
 
   it("ofNullable(null) is empty", () => {
-    assert.equal(empty().isPresent(), false);
+    assert.equal(Optional.ofNullable(null).isPresent(), false);
+  });
+
+  it("ofNullable(null) hands back the same instance empty() does, as Java's does", () => {
+    assert.equal(Optional.ofNullable(null), Optional.empty());
   });
 
   it("treats undefined as null", () => {
@@ -53,7 +54,7 @@ describe("Optional.map", () => {
 
   it("returns empty and skips the mapper when already empty", () => {
     let called = false;
-    const result = empty<number>().map((x) => {
+    const result = Optional.empty<number>().map((x) => {
       called = true;
       return x * 2;
     });
@@ -79,13 +80,13 @@ describe("Optional.flatMap", () => {
 
   it("returns empty when the mapper returns an empty Optional", () => {
     // regression: this threw IllegalStateException, because flatMap called .get() on the result to probe it
-    const result = Optional.of(5).flatMap(() => empty<number>());
+    const result = Optional.of(5).flatMap(() => Optional.empty<number>());
     assert.equal(result.isPresent(), false);
   });
 
   it("returns empty and skips the mapper when already empty", () => {
     let called = false;
-    const result = empty<number>().flatMap((x) => {
+    const result = Optional.empty<number>().flatMap((x) => {
       called = true;
       return Optional.of(x);
     });
@@ -115,7 +116,7 @@ describe("Optional.filter", () => {
 
   it("stays empty and skips the predicate when already empty", () => {
     let called = false;
-    const result = empty<number>().filter(() => {
+    const result = Optional.empty<number>().filter(() => {
       called = true;
       return true;
     });
@@ -127,13 +128,13 @@ describe("Optional.filter", () => {
 describe("Optional unwrapping", () => {
   it("get() throws NoSuchElementException when empty, as Java's does", () => {
     // regression: this threw IllegalStateException. The message was already Java's; only the class was wrong.
-    assert.throws(() => empty().get(), NoSuchElementException);
-    assert.throws(() => empty().get(), { message: "No value present" });
+    assert.throws(() => Optional.empty().get(), NoSuchElementException);
+    assert.throws(() => Optional.empty().get(), { message: "No value present" });
   });
 
   it("orElse returns the fallback only when empty", () => {
     assert.equal(Optional.of(5).orElse(0), 5);
-    assert.equal(empty<number>().orElse(0), 0);
+    assert.equal(Optional.empty<number>().orElse(0), 0);
   });
 
   it("orElseGet is lazy", () => {
@@ -144,7 +145,7 @@ describe("Optional unwrapping", () => {
     });
     assert.equal(value, 5);
     assert.equal(called, false);
-    assert.equal(empty<number>().orElseGet(() => 7), 7);
+    assert.equal(Optional.empty<number>().orElseGet(() => 7), 7);
   });
 
   it("orElseThrow returns the value when present", () => {
@@ -152,7 +153,7 @@ describe("Optional unwrapping", () => {
   });
 
   it("orElseThrow throws the supplied exception when empty", () => {
-    assert.throws(() => empty().orElseThrow(() => new NotImplementedException("nope")), NotImplementedException);
+    assert.throws(() => Optional.empty().orElseThrow(() => new NotImplementedException("nope")), NotImplementedException);
   });
 
   it("orElseThrow accepts any Error, not just this library's hierarchy", () => {
@@ -164,16 +165,16 @@ describe("Optional unwrapping", () => {
         this.name = "UserNotFound";
       }
     }
-    assert.throws(() => empty().orElseThrow(() => new UserNotFound("ada")), UserNotFound);
-    assert.throws(() => empty().orElseThrow(() => new UserNotFound("ada")), { message: "no user ada" });
+    assert.throws(() => Optional.empty().orElseThrow(() => new UserNotFound("ada")), UserNotFound);
+    assert.throws(() => Optional.empty().orElseThrow(() => new UserNotFound("ada")), { message: "no user ada" });
 
     // built-ins too, which the old bound also refused
-    assert.throws(() => empty().orElseThrow(() => new TypeError("nope")), TypeError);
+    assert.throws(() => Optional.empty().orElseThrow(() => new TypeError("nope")), TypeError);
   });
 
   it("orElseThrow defaults to NoSuchElementException when empty, matching get()", () => {
-    assert.throws(() => empty().orElseThrow(), NoSuchElementException);
-    assert.throws(() => empty().orElseThrow(), { message: "No value present" });
+    assert.throws(() => Optional.empty().orElseThrow(), NoSuchElementException);
+    assert.throws(() => Optional.empty().orElseThrow(), { message: "No value present" });
   });
 });
 
@@ -181,14 +182,14 @@ describe("Optional consumers", () => {
   it("ifPresent runs only when present", () => {
     const seen: number[] = [];
     Optional.of(5).ifPresent((x) => seen.push(x));
-    empty<number>().ifPresent((x) => seen.push(x));
+    Optional.empty<number>().ifPresent((x) => seen.push(x));
     assert.deepEqual(seen, [5]);
   });
 
   it("ifPresentOrElse takes the correct branch", () => {
     const seen: string[] = [];
     Optional.of(5).ifPresentOrElse((x) => seen.push(`value:${x}`), () => seen.push("empty"));
-    empty<number>().ifPresentOrElse((x) => seen.push(`value:${x}`), () => seen.push("empty"));
+    Optional.empty<number>().ifPresentOrElse((x) => seen.push(`value:${x}`), () => seen.push("empty"));
     assert.deepEqual(seen, ["value:5", "empty"]);
   });
 });
@@ -204,12 +205,12 @@ describe("Optional.equals", () => {
   });
 
   it("two empty Optionals are equal", () => {
-    assert.equal(empty().equals(empty()), true);
+    assert.equal(Optional.empty().equals(Optional.empty()), true);
   });
 
   it("an empty and a present Optional are unequal, both ways", () => {
-    assert.equal(Optional.of(5).equals(empty()), false);
-    assert.equal(empty().equals(Optional.of(5)), false);
+    assert.equal(Optional.of(5).equals(Optional.empty()), false);
+    assert.equal(Optional.empty().equals(Optional.of(5)), false);
   });
 
   it("returns exactly `true` for the same reference", () => {
@@ -257,7 +258,7 @@ describe("Optional.toString", () => {
 
   it("reports the value and the empty case", () => {
     assert.match(Optional.of(5).toString(), /^Optional\[5, typeof=number, hashcode=\d+\]$/);
-    assert.match(empty().toString(), /^Optional\[null, typeof=object, hashcode=\d+\]$/);
+    assert.match(Optional.empty().toString(), /^Optional\[null, typeof=object, hashcode=\d+\]$/);
   });
 });
 
@@ -278,7 +279,7 @@ describe("Optional.empty", () => {
   });
 
   it("equals the stand-in the rest of these tests use", () => {
-    assert.equal(Optional.empty<number>().equals(empty<number>()), true);
+    assert.equal(Optional.empty<number>().equals(Optional.empty<number>()), true);
   });
 
   it("is unequal to a present Optional, both ways", () => {
@@ -295,8 +296,8 @@ describe("Optional.isEmpty", () => {
   it("is the inverse of isPresent", () => {
     assert.equal(Optional.of(5).isEmpty(), false);
     assert.equal(Optional.of(5).isPresent(), true);
-    assert.equal(empty().isEmpty(), true);
-    assert.equal(empty().isPresent(), false);
+    assert.equal(Optional.empty().isEmpty(), true);
+    assert.equal(Optional.empty().isPresent(), false);
   });
 
   it("treats falsy-but-present values as present", () => {
@@ -318,35 +319,35 @@ describe("Optional.or", () => {
   });
 
   it("falls through to the supplier when empty", () => {
-    assert.equal(empty<number>().or(() => Optional.of(9)).get(), 9);
+    assert.equal(Optional.empty<number>().or(() => Optional.of(9)).get(), 9);
   });
 
   it("stays empty if the supplier is empty too, unlike orElseGet", () => {
-    const result = empty<number>().or(() => empty<number>());
+    const result = Optional.empty<number>().or(() => Optional.empty<number>());
     assert.equal(result.isEmpty(), true);
   });
 
   it("chains through several fallbacks", () => {
-    const result = empty<string>()
-      .or(() => empty<string>())
+    const result = Optional.empty<string>()
+      .or(() => Optional.empty<string>())
       .or(() => Optional.of("third"));
     assert.equal(result.get(), "third");
   });
 
   it("throws IllegalArgumentException if the supplier does not return an Optional", () => {
-    assert.throws(() => empty<number>().or(() => 9 as any), IllegalArgumentException);
+    assert.throws(() => Optional.empty<number>().or(() => 9 as any), IllegalArgumentException);
   });
 });
 
 describe("Optional.stream", () => {
   it("yields one element when present and none when empty", () => {
     assert.deepEqual([...Optional.of(5).stream()], [5]);
-    assert.deepEqual([...empty<number>().stream()], []);
+    assert.deepEqual([...Optional.empty<number>().stream()], []);
   });
 
   it("makes an Optional spreadable and for-of-able", () => {
     assert.deepEqual([...Optional.of(5)], [5]);
-    assert.deepEqual([...empty<number>()], []);
+    assert.deepEqual([...Optional.empty<number>()], []);
     const seen: number[] = [];
     for (const value of Optional.of(7)) {
       seen.push(value);
@@ -355,7 +356,7 @@ describe("Optional.stream", () => {
   });
 
   it("flattens a pile of Optionals down to the values that were there", () => {
-    const maybes = [Optional.of(1), empty<number>(), Optional.of(3)];
+    const maybes = [Optional.of(1), Optional.empty<number>(), Optional.of(3)];
     assert.deepEqual(maybes.flatMap((o) => [...o]), [1, 3]);
   });
 });
@@ -368,21 +369,21 @@ describe("Optional serialization", () => {
   });
 
   it("serialises an empty Optional as null", () => {
-    assert.equal(JSON.stringify(empty<string>()), "null");
+    assert.equal(JSON.stringify(Optional.empty<string>()), "null");
   });
 
   it("leaves no trace of the wrapper on a DTO", () => {
-    const dto = { name: "ada", nickname: Optional.of("addie"), pronouns: empty<string>() };
+    const dto = { name: "ada", nickname: Optional.of("addie"), pronouns: Optional.empty<string>() };
     assert.equal(JSON.stringify(dto), '{"name":"ada","nickname":"addie","pronouns":null}');
   });
 
   it("keeps the key for an empty Optional rather than dropping it", () => {
     // the distinction that matters: "there is no nickname" must not read as "nicknames were never mentioned"
-    assert.deepEqual(Object.keys(JSON.parse(JSON.stringify({ nickname: empty<string>() }))), ["nickname"]);
+    assert.deepEqual(Object.keys(JSON.parse(JSON.stringify({ nickname: Optional.empty<string>() }))), ["nickname"]);
   });
 
   it("survives being nested in an array", () => {
-    assert.equal(JSON.stringify([Optional.of(1), empty<number>(), Optional.of(3)]), "[1,null,3]");
+    assert.equal(JSON.stringify([Optional.of(1), Optional.empty<number>(), Optional.of(3)]), "[1,null,3]");
   });
 
   it("returns a value rather than a rendering of one", () => {
@@ -397,7 +398,7 @@ describe("Optional serialization", () => {
   });
 
   it("round trips through ofNullable, both present and empty", () => {
-    for (const original of [Optional.of("ada"), Optional.of(5), empty<string>()]) {
+    for (const original of [Optional.of("ada"), Optional.of(5), Optional.empty<string>()]) {
       const restored = Optional.ofNullable(JSON.parse(JSON.stringify(original)) as unknown);
       assert.ok(restored.equals(original), `${original.toString()} did not survive the round trip`);
     }

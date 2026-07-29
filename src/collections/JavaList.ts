@@ -207,10 +207,27 @@ export class JavaList<T> extends JavaCollection<T> {
     return new JavaList<T>(this.#state.items.slice(from, to));
   }
 
-  /** Sorts in place. Unlike `Array.sort`, there is no default comparator — sorting by stringified value is a trap. */
+  /**
+   * Java's `List.sort`: sorts in place, by the order the comparator describes. Stable, as Java's is.
+   *
+   * There is no default comparator. `Array.prototype.sort` has one — it compares the *stringified* values, so
+   * `[10, 9].sort()` is `[9, 10]` — and that default is a trap rather than a convenience. Pass
+   * {@link naturalOrder} to say explicitly what `Array.prototype.sort` only pretends to mean.
+   *
+   * Sorting positions rather than elements looks like indirection for its own sake, but it is the only way to
+   * honour the comparator on every element. `Array.prototype.sort` special-cases `undefined`: it hoists those
+   * entries to the end and never shows them to the comparator at all, so a {@link nullsFirst} comparator over a
+   * `JavaList<string | undefined>` would be quietly overruled. Positions are numbers, so nothing is hidden from
+   * the comparator here.
+   */
   public sort(comparator: (a: T, b: T) => number): void {
     this.#requireMutable("sort");
-    this.#state.items.sort(comparator);
+    const items = this.#state.items;
+    const order = items.map((_, index) => index);
+    order.sort((left, right) =>
+      comparator(elementAt(items, left, "JavaList.sort"), elementAt(items, right, "JavaList.sort")),
+    );
+    this.#state.items = order.map((index) => elementAt(items, index, "JavaList.sort"));
     this.#state.modCount++;
   }
 
