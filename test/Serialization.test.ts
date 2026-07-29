@@ -4,7 +4,6 @@ import { JavaList } from "../src/collections/JavaList.js";
 import { JavaMap, JavaMapEntry } from "../src/collections/JavaMap.js";
 import { JavaSet } from "../src/collections/JavaSet.js";
 import { JavaObject } from "../src/fundamentals/Object.js";
-import type { Deserializable } from "../src/serialization/Deserializable.js";
 import type { Serializable } from "../src/serialization/Serializable.js";
 
 class User extends JavaObject implements Serializable {
@@ -14,40 +13,7 @@ class User extends JavaObject implements Serializable {
   public toJSON(): unknown {
     return { name: this.name };
   }
-  public static fromJSON(json: string): User {
-    return new User(JSON.parse(json).name);
-  }
 }
-
-/**
- * The compile-time half of the test: `Deserializable` now constrains the static side, so this line fails to
- * typecheck if `fromJSON` is missing, misnamed, or returns the wrong type.
- */
-const _userIsDeserializable = User satisfies Deserializable<User>;
-
-describe("Deserializable", () => {
-  it("is satisfied by a class with a conforming static fromJSON", () => {
-    const user = User.fromJSON(JSON.stringify(new User("ada")));
-    assert.equal(user.name, "ada");
-    assert.ok(user instanceof User);
-    assert.equal(_userIsDeserializable, User);
-  });
-
-  it("rejects a class without one", () => {
-    // regression: the interface had its only member commented out, so it was structurally satisfied by every
-    // value in the language — `42 satisfies Deserializable` used to compile
-    class NotDeserializable extends JavaObject {}
-    // @ts-expect-error missing the static fromJSON the interface requires
-    const _check = NotDeserializable satisfies Deserializable<NotDeserializable>;
-    assert.ok(_check);
-  });
-
-  it("rejects a plain value", () => {
-    // @ts-expect-error a number has no fromJSON
-    const _check: Deserializable<number> = 42;
-    assert.equal(_check, 42);
-  });
-});
 
 describe("collection serialization", () => {
   it("serialises a list as a JSON array", () => {

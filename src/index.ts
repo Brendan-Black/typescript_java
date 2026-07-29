@@ -36,4 +36,3 @@ export { NullPointerException } from "./exceptions/NullPointerException.js";
 export { UnsupportedOperationException } from "./exceptions/UnsupportedOperationException.js";
 
 export type { Serializable } from "./serialization/Serializable.js";
-export type { Deserializable } from "./serialization/Deserializable.js";

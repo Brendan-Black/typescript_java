@@ -82,7 +82,7 @@ npm install github:Brendan-Black/typescript_java
 | `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry` |
 | `collections/Collections` | `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
 | `exceptions` | `TSJavaException` and 9 subclasses |
-| `serialization` | `Serializable`, `Deserializable<T>` (types only) |
+| `serialization` | `Serializable` (type only) |
 
 Everything is re-exported from the package root.
 
@@ -189,12 +189,8 @@ one value an `Optional` cannot hold — `of` rejects it and `ofNullable` folds i
 rather than dropping it, which is the difference between "there is no nickname" and "nicknames were never
 mentioned".
 
-`Deserializable<T>` types the *static* side. TypeScript cannot put a static member in an implemented interface, so
-a class opts in with `satisfies` at the point of declaration:
-
-```ts
-const _check = User satisfies Deserializable<User>;
-```
+There is no interface for the reverse direction. Parsing back is `JSON.parse` plus a constructor call, which is
+all the collections need — the pair form and the array form both feed straight into one.
 
 ## Where this deliberately departs from Java
 
@@ -217,8 +213,8 @@ module, and `NotImplementedException`.
 ## Roadmap
 
 - **DTO wire contracts** to and from backend frameworks (Spring/Jackson/raw Tomcat). Today's serialization layer is
-  two interfaces and `toJSON` on the collections and `Optional`; there is no framework-specific support, and
-  nothing implements `Deserializable` yet — parsing back is `JSON.parse` plus a constructor.
+  one interface and `toJSON` on the collections and `Optional`; there is no framework-specific support, and
+  nothing types the parse direction — a contract for that belongs with the layer that needs it.
 - **XML parsing** (JavaBeans). Not started.
 - Remaining `java.util` shapes: `Comparable`/`Comparator`, `TreeMap`/`TreeSet`, `Iterator` as an interface rather
   than a generator.
