@@ -54,8 +54,8 @@ both false for structurally equal objects; `JavaList.contains` and `JavaList.ind
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (600 tests); the serialization layer covers both directions of a JSON wire
-contract. See [Roadmap](#roadmap) for what is deliberately still missing.
+hierarchy are complete and tested (669 tests); the serialization layer covers both directions of a JSON wire
+contract and reads XML, parser and all. See [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
 
@@ -83,9 +83,11 @@ npm install github:Brendan-Black/typescript_java
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
 | `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaIterator`, `JavaListIterator`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
 | `collections/Collections` | `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap`, `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
-| `exceptions` | `TSJavaException` and 11 subclasses |
+| `exceptions` | `TSJavaException` and 13 subclasses |
 | `serialization/Serializable` | `Serializable` (type only) |
 | `serialization/JsonReader` | `JsonReader`, `JsonFields`, `readJson`, `objectOf`, `listOf`, `setOf`, `mapOf`, `objectAsMap`, `treeSetOf`, `treeMapOf`, `entryOf`, `arrayOf`, `stringValue`, `numberValue`, `integerValue`, `booleanValue`, `unknownValue`, `enumOf`, `nullable`, `optionalValue`, `withDefault`, `mapping` |
+| `serialization/XmlParser` | `parseXml`, `XmlElement` |
+| `serialization/XmlReader` | `XmlReader`, `XmlTextReader`, `XmlField`, `XmlFields`, `readXml`, `elementOf`, `elementNamed`, `textElement`, `mappingElement`, `attribute`, `optionalAttribute`, `textContent`, `child`, `optionalChild`, `childText`, `children`, `wrappedChildren`, `stringText`, `rawText`, `numberText`, `integerText`, `booleanText`, `enumText`, `mappingText` |
 
 Everything is re-exported from the package root.
 
@@ -324,10 +326,12 @@ Everything descends from `TSJavaException` (standing in for `Throwable`) via `Ru
 
 `ClassCastException` · `ConcurrentModificationException` · `IllegalArgumentException` · `IllegalStateException` ·
 `IndexOutOfBoundsException` · `JsonBindException` · `NoSuchElementException` · `NotImplementedException` ·
-`NullPointerException` · `UnsupportedOperationException`
+`NullPointerException` · `UnsupportedOperationException` · `XmlBindException` · `XmlParseException`
 
-`JsonBindException` is an `IllegalArgumentException` underneath — a payload of the wrong shape is an argument the
-reader cannot accept — so either type catches it. It carries the path of the slot that failed.
+The three serialization failures are `IllegalArgumentException`s underneath — a payload of the wrong shape is an
+argument the reader cannot accept — so either type catches them. `JsonBindException` and `XmlBindException` carry
+the path of the slot that failed; `XmlParseException` carries the line and column, because a document that is not
+XML at all has no slots yet.
 
 ### Serialization
 
@@ -399,6 +403,63 @@ for a `Map<String, V>`. `mapping` is the hinge onto your own types:
 const point = mapping(objectOf({ x: numberValue, y: numberValue }), ({ x, y }) => new Point(x, y));
 ```
 
+### XML
+
+Java services still speak XML — SOAP endpoints, JAXB-annotated beans, configuration a `web.xml` away from being
+JSON — and Node has nothing to read it with. There is no `DOMParser` outside the browser, and this package has no
+runtime dependencies, so `parseXml` is a hand-written recursive-descent parser: elements, attributes, text,
+`CDATA`, comments, processing instructions, the five built-in entities and numeric character references.
+
+```ts
+const root = parseXml(`<order id="A-1"><total>19.99</total></order>`);
+root.getAttribute("id").get();           // "A-1"
+root.getChild("total").get().getText();  // "19.99"
+root.toXml();                            // back out again
+```
+
+An `XmlElement` is a document model rather than a DOM: a name, its attributes, its child elements and its own
+character data, with no text nodes and no parent pointers. Whitespace between children is dropped so a
+pretty-printed document reads like a compact one, and kept inside a leaf, where it is the value. What the model
+gives up is *mixed content* — `<p>hello <b>world</b> again</p>` keeps both parts but not the fact that the `<b>`
+sat between them — which no document written for data interchange depends on. Malformed input raises
+`XmlParseException`, which names the line and column.
+
+Binding a document to a DTO is the same idea as `JsonReader`, one layer taller, because an XML element has three
+places a value can hide. An `XmlTextReader` turns character data into a value, an `XmlField` says *where* in an
+element to look, and an `XmlReader` assembles the two into a `T`:
+
+```ts
+interface Item { sku: string; quantity: number; }
+interface Order { id: string; total: number; note: Optional<string>; items: JavaList<Item>; }
+
+const item = elementOf<Item>({
+  sku: attribute("sku"),
+  quantity: childText("quantity", integerText),
+});
+
+const order = elementOf<Order>({
+  id: attribute("id"),
+  total: childText("total", numberText),
+  note: optionalChild("note", textElement()),
+  items: wrappedChildren("items", "item", item), // JAXB's @XmlElementWrapper
+});
+
+readXml(body, elementNamed("order", order));
+```
+
+Failures carry an XPath rather than the `$.field[0]` notation the JSON readers use, because that is the notation
+every other XML tool already speaks:
+
+```
+/order/items/item[2]/quantity: expected an integer, got "one"
+```
+
+`stringText` trims, since indentation is not content; `rawText` is there for when it is. `booleanText` accepts
+XML Schema's four spellings and refuses everything else — Java's own `Boolean.parseBoolean` answers `false` to a
+typo, which is the wrong end of the trade for a wire contract. Namespaces are left as written: a prefixed name
+stays prefixed, `xmlns` declarations are ordinary attributes, and `getLocalName()` is there for matching without
+one. DTDs are skipped rather than honoured, so an undeclared entity is a failure instead of a silent hole.
+
 ## Where this deliberately departs from Java
 
 | | Java | Here | Why |
@@ -423,11 +484,13 @@ const point = mapping(objectOf({ x: numberValue, y: numberValue }), ({ x, y }) =
 | `TreeMap.descendingMap`, `TreeSet.descendingSet` | live views | copies, ordered by the reversed comparator | A sorted collection in its own right rather than a reversed reading of another one; `descendingKeys()` covers the walk without the copy |
 | `subMap` / `subSet` bounds | `(from, fromInclusive, to, toInclusive)` | `(from, to, fromInclusive?, toInclusive?)` | A `TreeMap<boolean, V>` would make the second argument a key and a flag at once, with nothing at runtime able to tell which was meant |
 | `TreeMap.descendingKeySet` | live `NavigableSet` | `descendingKeys()` iterator, or `descendingMap()` | The view is almost always immediately walked; `descendingMap()` covers the rest and is a sorted map in its own right |
+| XML parsing | a conforming parser: DTDs, entity declarations, namespace resolution, mixed content | elements, attributes, text, `CDATA`, the five built-in entities; a doctype is skipped and prefixes are left on names | Each omitted piece is refused or ignored explicitly rather than half-implemented. A parser that reads a DTD and applies none of it would be lying about the document it produced |
 | `new TreeMap<Point, V>()` | compiles, throws at the first comparison | same | TypeScript cannot constrain a class's type parameter per constructor. Pass `naturalOrder<K>()` — which *is* constrained — to move the check to compile time |
 
 Additions with no Java counterpart: `JavaMap.find` / `JavaList.find` (returning `Optional`), the whole `Contracts`
-module, `NotImplementedException`, and the `JsonReader` layer — Java's own binding lives in Jackson rather than in
-the standard library, and the readers here follow Jackson's decisions where it has made one.
+module, `NotImplementedException`, and the `JsonReader` and `XmlReader` layers — Java's own binding lives in
+Jackson and JAXB rather than in the standard library, and the readers here follow their decisions where one has
+been made.
 
 ## Roadmap
 
@@ -435,8 +498,9 @@ the standard library, and the readers here follow Jackson's decisions where it h
   `Serializable` out, `JsonReader` in — but nothing here knows about a particular backend's conventions:
   Spring's error envelope, Jackson's polymorphic `@JsonTypeInfo` discriminators, or the date and `BigDecimal`
   encodings a Java service picks by configuration rather than by type.
-- **XML parsing** (JavaBeans). Not started. Node has no `DOMParser` and this package has no runtime dependencies,
-  so it needs a tokenizer written here; the binding half can reuse the reader combinators above.
+- **Writing XML from a contract.** `XmlElement.toXml` renders a tree that was built or parsed, which is enough to
+  round-trip a document, but there is no declarative write direction to match `XmlReader` — nothing that takes a
+  DTO and a shape and produces the element for it, the way `Serializable` answers `JsonReader`.
 
 ## Development
 

@@ -57,6 +57,8 @@ export { NoSuchElementException } from "./exceptions/NoSuchElementException.js";
 export { NotImplementedException } from "./exceptions/NotImplementedException.js";
 export { NullPointerException } from "./exceptions/NullPointerException.js";
 export { UnsupportedOperationException } from "./exceptions/UnsupportedOperationException.js";
+export { XmlBindException } from "./exceptions/XmlBindException.js";
+export { XmlParseException } from "./exceptions/XmlParseException.js";
 
 export type { Serializable } from "./serialization/Serializable.js";
 export type { JsonFields, JsonReader } from "./serialization/JsonReader.js";
@@ -82,3 +84,27 @@ export {
   unknownValue,
   withDefault,
 } from "./serialization/JsonReader.js";
+export { XmlElement, parseXml } from "./serialization/XmlParser.js";
+export type { XmlField, XmlFields, XmlReader, XmlTextReader } from "./serialization/XmlReader.js";
+export {
+  attribute,
+  booleanText,
+  child,
+  childText,
+  children,
+  elementNamed,
+  elementOf,
+  enumText,
+  integerText,
+  mappingElement,
+  mappingText,
+  numberText,
+  optionalAttribute,
+  optionalChild,
+  rawText,
+  readXml,
+  stringText,
+  textContent,
+  textElement,
+  wrappedChildren,
+} from "./serialization/XmlReader.js";
