@@ -54,7 +54,7 @@ both false for structurally equal objects; `JavaList.contains` and `JavaList.ind
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (404 tests); the serialization layer is one interface and little more. See
+hierarchy are complete and tested (482 tests); the serialization layer is one interface and little more. See
 [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -81,7 +81,7 @@ npm install github:Brendan-Black/typescript_java
 | `fundamentals/Comparable` | `Comparable`, `NaturallyOrdered`, `compareOf` |
 | `fundamentals/Comparator` | `Comparator`, `comparator`, `comparing`, `naturalOrder`, `reverseOrder`, `nullsFirst`, `nullsLast` |
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
-| `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry` |
+| `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
 | `collections/Collections` | `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap`, `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
 | `exceptions` | `TSJavaException` and 10 subclasses |
 | `serialization` | `Serializable` (type only) |
@@ -167,6 +167,34 @@ if (at < 0) {
 }
 ```
 
+### Sorted collections
+
+`TreeMap` and `TreeSet` keep their keys in order instead of in buckets — which is what you want when the key
+type has a sensible order but no trustworthy hash, and it is the only way to ask the questions on the right:
+
+```ts
+const scores = new TreeMap<string, number>([["carol", 3], ["alice", 1], ["bob", 2]]);
+
+[...scores.keys()];       // ["alice", "bob", "carol"] — key order, not insertion order
+scores.firstKey();        // "alice"
+scores.floorKey("bib");   // "bob" is above it; "alice" is the greatest key at or below
+scores.headMap("bob");    // {alice=1}
+scores.pollFirstEntry();  // removes and returns alice=1
+```
+
+The full `NavigableMap` / `NavigableSet` surface is there: `first`/`last`, `floor`/`ceiling`/`lower`/`higher`,
+`poll` from either end, `headMap`/`tailMap`/`subMap` (and the `Set` equivalents), and descending views. Both
+take an optional comparator ahead of their contents, so `new TreeSet(reverseOrder<string>(), names)` reads the
+way Java's constructor does; with none, the keys are ordered by `compareOf`.
+
+Both share their derived operations with `JavaMap` and `JavaSet` — `TreeMap` extends the same `JavaAbstractMap`
+that `JavaMap` does, so `merge`, the `compute` family and the three live views behave identically, and a
+`TreeMap` `equals` a `JavaMap` holding the same entries.
+
+One thing to keep in mind, and it is Java's rule too: a sorted collection decides what counts as the same key by
+**comparing**, not by `equals`. Two keys that compare equal are one entry, whatever `equals` says — which is the
+consistency-with-equals contract on `Comparable` asking to be honoured.
+
 ### Ordering
 
 `Comparable` for a type that carries its own order, `Comparator` for one imposed from outside, and Java's
@@ -236,7 +264,7 @@ Everything descends from `TSJavaException` (standing in for `Throwable`) via `Ru
 
 ### Serialization
 
-`JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry` and `Optional` implement `Serializable`, so `JSON.stringify`
+`JavaList`, `JavaSet`, `JavaMap`, `TreeMap`, `TreeSet`, `JavaMapEntry` and `Optional` implement `Serializable`, so `JSON.stringify`
 produces something a caller would expect:
 
 ```ts
@@ -284,6 +312,11 @@ all the collections need — the pair form and the array form both feed straight
 | `List.sort` | any comparator, every element | same | `Array.prototype.sort` hoists `undefined` entries to the end without ever consulting the comparator; `JavaList.sort` sorts positions so that nothing is hidden from it |
 | `Collection.removeIf` | removes through the iterator, element by element | chooses from a snapshot, removes by value | There is no `Iterator.remove()` to build on here. The two differ only for a predicate that accepts one of two `equals` elements and not the other |
 | `Collections.max` / `min` | takes a `Collection` | takes any `Iterable` | An array or a plain `Set` is as good an input, and nothing in the algorithm needs more |
+| `TreeMap` storage | red-black tree | one sorted array | Lookups are O(log n) either way; insertion and removal are O(n) here. In exchange every navigation and range question is index arithmetic, which is why they are all present and all obviously correct |
+| `TreeMap.headMap` / `subMap`, `TreeSet.headSet` / `subSet` | live views | copies | Same reason as `List.subList`, plus a live range view has to reject keys outside its own bounds |
+| `subMap` / `subSet` bounds | `(from, fromInclusive, to, toInclusive)` | `(from, to, fromInclusive?, toInclusive?)` | A `TreeMap<boolean, V>` would make the second argument a key and a flag at once, with nothing at runtime able to tell which was meant |
+| `TreeMap.descendingKeySet` | live `NavigableSet` | `descendingKeys()` iterator, or `descendingMap()` | The view is almost always immediately walked; `descendingMap()` covers the rest and is a sorted map in its own right |
+| `new TreeMap<Point, V>()` | compiles, throws at the first comparison | same | TypeScript cannot constrain a class's type parameter per constructor. Pass `naturalOrder<K>()` — which *is* constrained — to move the check to compile time |
 
 Additions with no Java counterpart: `JavaMap.find` / `JavaList.find` (returning `Optional`), the whole `Contracts`
 module, and `NotImplementedException`.
@@ -294,9 +327,9 @@ module, and `NotImplementedException`.
   one interface and `toJSON` on the collections and `Optional`; there is no framework-specific support, and
   nothing types the parse direction — a contract for that belongs with the layer that needs it.
 - **XML parsing** (JavaBeans). Not started.
-- Remaining `java.util` shapes: `TreeMap`/`TreeSet` (the ordering they need is in place), and `Iterator` as an
-  interface rather than a generator — which is what would make `Iterator.remove()` expressible, though `removeIf`
-  now covers what that idiom is usually reaching for.
+- Remaining `java.util` shapes: `Iterator` as an interface rather than a generator — which is what would make
+  `Iterator.remove()` expressible, though `removeIf` now covers what that idiom is usually reaching for, and
+  what would let the sorted collections hand back live range views instead of copies.
 
 ## Development
 

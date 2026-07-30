@@ -19,10 +19,13 @@ export {
 } from "./fundamentals/Comparator.js";
 export type { Comparator } from "./fundamentals/Comparator.js";
 
+export { JavaAbstractMap, JavaMapEntry } from "./collections/JavaAbstractMap.js";
 export { JavaAbstractSet, JavaCollection } from "./collections/JavaCollection.js";
 export { JavaList } from "./collections/JavaList.js";
-export { JavaMap, JavaMapEntry } from "./collections/JavaMap.js";
+export { JavaMap } from "./collections/JavaMap.js";
 export { JavaSet } from "./collections/JavaSet.js";
+export { TreeMap } from "./collections/TreeMap.js";
+export { TreeSet } from "./collections/TreeSet.js";
 export {
   binarySearch,
   emptyList,

@@ -1,9 +1,13 @@
 import { NoSuchElementException } from "../exceptions/NoSuchElementException.js";
 import { compareOf, type NaturallyOrdered } from "../fundamentals/Comparable.js";
 import { elementAt } from "../fundamentals/Indexing.js";
+import type { JavaAbstractMap } from "./JavaAbstractMap.js";
+import type { JavaAbstractSet } from "./JavaCollection.js";
 import { JavaList } from "./JavaList.js";
 import { JavaMap } from "./JavaMap.js";
 import { JavaSet } from "./JavaSet.js";
+import { TreeMap } from "./TreeMap.js";
+import { TreeSet } from "./TreeSet.js";
 
 /**
  * Java's `java.util.Collections`: the static helpers that wrap or manufacture collections, and the algorithms
@@ -22,14 +26,24 @@ import { JavaSet } from "./JavaSet.js";
  * @module
  */
 
-/** Java's `Collections.unmodifiableMap`: a read-only view of a map. See {@link JavaMap.unmodifiable}. */
-export function unmodifiableMap<K, V>(map: JavaMap<K, V>): JavaMap<K, V> {
-  return JavaMap.unmodifiable(map);
+/**
+ * Java's `Collections.unmodifiableMap`: a read-only view of a map. See {@link JavaMap.unmodifiable}.
+ *
+ * Overloaded rather than written against {@link JavaAbstractMap}, so the sorted map keeps its type: Java's
+ * `unmodifiableSortedMap` is a separate method for the same reason, since a view typed as a plain `Map` would
+ * have lost `firstKey` and the rest of the navigation on the way through.
+ */
+export function unmodifiableMap<K, V>(map: TreeMap<K, V>): TreeMap<K, V>;
+export function unmodifiableMap<K, V>(map: JavaMap<K, V>): JavaMap<K, V>;
+export function unmodifiableMap<K, V>(map: JavaMap<K, V> | TreeMap<K, V>): JavaAbstractMap<K, V> {
+  return map instanceof TreeMap ? TreeMap.unmodifiable(map) : JavaMap.unmodifiable(map);
 }
 
 /** Java's `Collections.unmodifiableSet`: a read-only view of a set. See {@link JavaSet.unmodifiable}. */
-export function unmodifiableSet<T>(set: JavaSet<T>): JavaSet<T> {
-  return JavaSet.unmodifiable(set);
+export function unmodifiableSet<T>(set: TreeSet<T>): TreeSet<T>;
+export function unmodifiableSet<T>(set: JavaSet<T>): JavaSet<T>;
+export function unmodifiableSet<T>(set: JavaSet<T> | TreeSet<T>): JavaAbstractSet<T> {
+  return set instanceof TreeSet ? TreeSet.unmodifiable(set) : JavaSet.unmodifiable(set);
 }
 
 /** Java's `Collections.unmodifiableList`: a read-only view of a list. See {@link JavaList.unmodifiable}. */
