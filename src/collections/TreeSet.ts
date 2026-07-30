@@ -208,34 +208,40 @@ export class TreeSet<T> extends JavaAbstractSet<T> {
   /**
    * Java's `SortedSet.headSet`: the members below `value`.
    *
-   * A copy rather than a view, matching {@link TreeMap.headMap} — mutating the result leaves this set alone.
+   * A live view, matching {@link TreeMap.headMap}: it shares this set's members, so removing through the range
+   * removes from this set and adding to this set inside the range shows up through it. {@link add} refuses a
+   * member the range could not then see.
    *
    * @param inclusive whether `value` itself is included. Defaults to `false`, which is Java's one-argument form.
+   * @throws IllegalArgumentException if this set is itself a range view and `value` falls outside its bounds
    */
   public headSet(value: T, inclusive: boolean = false): TreeSet<T> {
-    return this.#copyOf(this.#map.headMap(value, inclusive));
+    return this.#rangeView(this.#map.headMap(value, inclusive));
   }
 
   /**
-   * Java's `SortedSet.tailSet`: the members at or above `value`. A copy, like {@link headSet}.
+   * Java's `SortedSet.tailSet`: the members at or above `value`. A live view, like {@link headSet}.
    *
    * @param inclusive whether `value` itself is included. Defaults to `true` — the opposite of {@link headSet}'s
    *   default, so that `headSet(v)` and `tailSet(v)` partition the set between them.
+   * @throws IllegalArgumentException if this set is itself a range view and `value` falls outside its bounds
    */
   public tailSet(value: T, inclusive: boolean = true): TreeSet<T> {
-    return this.#copyOf(this.#map.tailMap(value, inclusive));
+    return this.#rangeView(this.#map.tailMap(value, inclusive));
   }
 
   /**
-   * Java's `SortedSet.subSet`: the members in a range, `[from, to)` by default. A copy, like {@link headSet}.
+   * Java's `SortedSet.subSet`: the members in a range, `[from, to)` by default. A live view, like
+   * {@link headSet}.
    *
    * NOTE: the two flags come last, where Java interleaves them. See {@link TreeMap.subMap} for why they cannot
    * be interleaved here.
    *
-   * @throws IllegalArgumentException if the range runs backwards
+   * @throws IllegalArgumentException if the range runs backwards, or if this set is itself a range view and
+   *   either bound falls outside it
    */
   public subSet(from: T, to: T, fromInclusive: boolean = true, toInclusive: boolean = false): TreeSet<T> {
-    return this.#copyOf(this.#map.subMap(from, to, fromInclusive, toInclusive));
+    return this.#rangeView(this.#map.subMap(from, to, fromInclusive, toInclusive));
   }
 
   /**
@@ -254,10 +260,22 @@ export class TreeSet<T> extends JavaAbstractSet<T> {
     return this.#map.descendingKeys();
   }
 
-  /** Wraps a map produced by one of {@link TreeMap}'s range operations, keeping the order it already carries. */
+  /** Wraps a map {@link TreeMap} has already copied, keeping the order it carries. */
   #copyOf(map: TreeMap<T, boolean>): TreeSet<T> {
     const set = new TreeSet<T>();
     set.#map = map;
+    return set;
+  }
+
+  /**
+   * Wraps a range view of the backing map.
+   *
+   * The read-only flag is carried across by hand for the same reason {@link iterator} checks it: {@link of}
+   * marks the set unmodifiable and leaves the map alone, so a range read off one would otherwise be writable.
+   */
+  #rangeView(map: TreeMap<T, boolean>): TreeSet<T> {
+    const set = this.#copyOf(map);
+    set.#readOnly = this.#readOnly;
     return set;
   }
 

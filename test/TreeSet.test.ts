@@ -174,12 +174,75 @@ describe("TreeSet ranges", () => {
     assert.throws(() => numbers().subSet(40, 20), IllegalArgumentException);
   });
 
-  it("returns copies, so mutating a range leaves the original alone", () => {
+  it("writes through to the set it was taken from", () => {
     const set = numbers();
     const head = set.headSet(30);
     head.add(15);
-    assert.deepEqual(set.toArray(), [10, 20, 30, 40]);
-    assert.deepEqual(head.toArray(), [10, 15, 20]);
+    head.remove(10);
+    assert.deepEqual(set.toArray(), [15, 20, 30, 40]);
+    assert.deepEqual(head.toArray(), [15, 20]);
+  });
+
+  it("sees changes made to the set behind it", () => {
+    const set = numbers();
+    const head = set.headSet(30);
+    set.add(25);
+    set.add(35);
+    assert.deepEqual(head.toArray(), [10, 20, 25]);
+    assert.equal(head.size(), 3);
+  });
+
+  it("refuses a member it could not then see", () => {
+    const middle = numbers().subSet(20, 40);
+    assert.throws(() => middle.add(50), IllegalArgumentException);
+    assert.throws(() => middle.add(40), IllegalArgumentException);
+    assert.doesNotThrow(() => middle.add(25));
+  });
+
+  it("treats a member outside its bounds as absent", () => {
+    const set = numbers();
+    const middle = set.subSet(20, 40);
+    assert.equal(middle.contains(10), false);
+    assert.equal(middle.remove(10), false);
+    assert.equal(set.contains(10), true);
+  });
+
+  it("answers its ends and navigation within its bounds", () => {
+    const middle = numbers().subSet(20, 40);
+    assert.equal(middle.size(), 2);
+    assert.equal(middle.first(), 20);
+    assert.equal(middle.last(), 30);
+    assert.equal(middle.floor(100), 30);
+    assert.equal(middle.higher(30), null);
+    assert.throws(() => numbers().subSet(20, 20).first(), NoSuchElementException);
+  });
+
+  it("polls and clears only what it can see", () => {
+    const set = numbers();
+    const middle = set.subSet(20, 40);
+    assert.equal(middle.pollFirst(), 20);
+    assert.equal(middle.pollLast(), 30);
+    assert.deepEqual(set.toArray(), [10, 40]);
+
+    const other = numbers();
+    other.headSet(30).clear();
+    assert.deepEqual(other.toArray(), [30, 40]);
+  });
+
+  it("narrows further, but will not be widened by narrowing", () => {
+    const middle = numbers().subSet(20, 40);
+    assert.deepEqual(middle.headSet(30).toArray(), [20]);
+    assert.throws(() => middle.tailSet(10), IllegalArgumentException);
+    assert.throws(() => middle.headSet(40, true), IllegalArgumentException);
+  });
+
+  it("removes through its iterator, taking the member from the set behind it", () => {
+    const set = numbers();
+    const middle = set.subSet(20, 40);
+    const cursor = middle.iterator();
+    cursor.next();
+    cursor.remove();
+    assert.deepEqual(set.toArray(), [10, 30, 40]);
   });
 
   it("a range keeps the comparator it came from", () => {
@@ -250,10 +313,17 @@ describe("TreeSet immutability", () => {
     assert.throws(() => view.add("eve"), UnsupportedOperationException);
   });
 
-  it("reading a range off an unmodifiable view gives something mutable", () => {
+  it("a range read off an unmodifiable view is unmodifiable too, since it writes through", () => {
     const view = unmodifiableSet(names());
     const head = view.headSet("carol");
-    assert.doesNotThrow(() => head.add("bea"));
-    assert.deepEqual(head.toArray(), ["alice", "bea", "bob"]);
+    assert.deepEqual(head.toArray(), ["alice", "bob"]);
+    assert.throws(() => head.add("bea"), UnsupportedOperationException);
+    assert.throws(() => head.clear(), UnsupportedOperationException);
+  });
+
+  it("TreeSet.of hands out ranges that refuse writes, though its backing map is not itself read-only", () => {
+    const set = TreeSet.of<string>("a", "b", "c");
+    assert.throws(() => set.headSet("c").add("bb"), UnsupportedOperationException);
+    assert.throws(() => set.headSet("c").pollFirst(), UnsupportedOperationException);
   });
 });

@@ -268,13 +268,98 @@ describe("TreeMap ranges", () => {
     assert.throws(() => numbers().subMap(40, 20), IllegalArgumentException);
   });
 
-  it("returns copies, so mutating a range leaves the original alone", () => {
+  it("writes through to the map it was taken from", () => {
     const map = numbers();
     const head = map.headMap(30);
     head.put(15, "new");
     head.remove(10);
-    assert.deepEqual([...map.keys()], [10, 20, 30, 40]);
+    assert.deepEqual([...map.keys()], [15, 20, 30, 40]);
     assert.deepEqual([...head.keys()], [15, 20]);
+  });
+
+  it("sees changes made to the map behind it", () => {
+    const map = numbers();
+    const head = map.headMap(30);
+    map.put(25, "new");
+    map.remove(10);
+    assert.deepEqual([...head.keys()], [20, 25]);
+    assert.equal(head.size(), 2);
+    // and a change outside the bounds is invisible to it
+    map.put(35, "outside");
+    assert.deepEqual([...head.keys()], [20, 25]);
+  });
+
+  it("refuses a key it could not then see", () => {
+    const map = numbers();
+    const middle = map.subMap(20, 40);
+    assert.throws(() => middle.put(50, "past the top"), IllegalArgumentException);
+    assert.throws(() => middle.put(5, "below the bottom"), IllegalArgumentException);
+    assert.throws(() => middle.put(40, "the exclusive bound itself"), IllegalArgumentException);
+    assert.doesNotThrow(() => middle.put(20, "the inclusive bound itself"));
+  });
+
+  it("treats a key outside its bounds as absent rather than throwing, for reads and removals", () => {
+    const map = numbers();
+    const middle = map.subMap(20, 40);
+    assert.equal(middle.get(10), null);
+    assert.equal(middle.containsKey(10), false);
+    assert.equal(middle.remove(10), null);
+    // the entry the range cannot see is still there
+    assert.equal(map.get(10), "a");
+  });
+
+  it("answers size, ends and navigation within its bounds", () => {
+    const middle = numbers().subMap(20, 40);
+    assert.equal(middle.size(), 2);
+    assert.equal(middle.firstKey(), 20);
+    assert.equal(middle.lastKey(), 30);
+    // a key past the top of the range floors to the range's own last key, not the map's
+    assert.equal(middle.floorKey(100), 30);
+    assert.equal(middle.ceilingKey(0), 20);
+    assert.equal(middle.higherKey(30), null);
+    assert.equal(middle.lowerKey(20), null);
+  });
+
+  it("is empty rather than negative when its bounds meet", () => {
+    const map = numbers();
+    const empty = map.subMap(20, 20);
+    assert.equal(empty.size(), 0);
+    assert.equal(empty.isEmpty(), true);
+    assert.equal(empty.firstEntry(), null);
+    assert.equal(empty.pollFirstEntry(), null);
+    assert.throws(() => empty.firstKey(), NoSuchElementException);
+  });
+
+  it("polls and clears only what it can see", () => {
+    const map = numbers();
+    const middle = map.subMap(20, 40);
+    assert.equal(middle.pollFirstEntry()?.getKey(), 20);
+    assert.equal(middle.pollLastEntry()?.getKey(), 30);
+    assert.deepEqual([...map.keys()], [10, 40]);
+
+    const other = numbers();
+    other.headMap(30).clear();
+    assert.deepEqual([...other.keys()], [30, 40]);
+  });
+
+  it("narrows further, but will not be widened by narrowing", () => {
+    const middle = numbers().subMap(20, 40);
+    assert.deepEqual([...middle.headMap(30).keys()], [20]);
+    assert.throws(() => middle.headMap(50), IllegalArgumentException);
+    assert.throws(() => middle.tailMap(10), IllegalArgumentException);
+    // the excluded top is still a legal place to cut, so long as the cut does not try to include it
+    assert.doesNotThrow(() => middle.headMap(40));
+    assert.throws(() => middle.headMap(40, true), IllegalArgumentException);
+  });
+
+  it("fails fast on a change to the map behind it, as the map's own walks do", () => {
+    const map = numbers();
+    const head = map.headMap(40);
+    assert.throws(() => {
+      for (const _pair of head) {
+        map.put(50, "outside the range entirely");
+      }
+    }, ConcurrentModificationException);
   });
 
   it("a range keeps the comparator it came from", () => {
@@ -282,6 +367,42 @@ describe("TreeMap ranges", () => {
     const tail = map.tailMap(20);
     tail.put(15, "d");
     assert.deepEqual([...tail.keys()], [20, 15, 10]);
+  });
+
+  it("walks backwards within its bounds, and copies only those entries into a descending map", () => {
+    const middle = numbers().subMap(20, 40);
+    assert.deepEqual([...middle.descendingKeys()], [30, 20]);
+    assert.deepEqual([...middle.descendingMap().keys()], [30, 20]);
+  });
+
+  it("hands out key, value and entry views that stop at its bounds and write through", () => {
+    const map = numbers();
+    const middle = map.subMap(20, 40);
+    assert.deepEqual([...middle.keySet()], [20, 30]);
+    assert.deepEqual(middle.values().toArray(), ["b", "c"]);
+    assert.equal(middle.entrySet().size(), 2);
+
+    const cursor = middle.entrySet().iterator();
+    cursor.next();
+    cursor.remove();
+    assert.deepEqual([...map.keys()], [10, 30, 40]);
+  });
+
+  it("a range of a range is still live against the original", () => {
+    const map = numbers();
+    const inner = map.subMap(20, 40).headMap(30);
+    map.put(25, "new");
+    assert.deepEqual([...inner.keys()], [20, 25]);
+    inner.remove(20);
+    assert.deepEqual([...map.keys()], [10, 25, 30, 40]);
+  });
+
+  it("compares equal to a plain map holding the same entries", () => {
+    const middle = numbers().subMap(20, 40);
+    const plain = new TreeMap<number, string>([[20, "b"], [30, "c"]]);
+    assert.equal(middle.equals(plain), true);
+    assert.equal(middle.hashCode(), plain.hashCode());
+    assert.equal(middle.toString(), "{20=b, 30=c}");
   });
 });
 
@@ -360,10 +481,25 @@ describe("TreeMap immutability", () => {
     assert.throws(() => view.put("eve", 5), UnsupportedOperationException);
   });
 
-  it("reading a range off an unmodifiable view gives something mutable", () => {
+  it("a range read off an unmodifiable view is unmodifiable too, since it writes through", () => {
     const view = unmodifiableMap(letters());
     const head = view.headMap("carol");
-    assert.doesNotThrow(() => head.put("bea", 9));
-    assert.deepEqual([...head.keys()], ["alice", "bea", "bob"]);
+    assert.deepEqual([...head.keys()], ["alice", "bob"]);
+    assert.throws(() => head.put("bea", 9), UnsupportedOperationException);
+    assert.throws(() => head.clear(), UnsupportedOperationException);
+  });
+
+  it("TreeMap.of hands out ranges that refuse writes", () => {
+    const map = TreeMap.of<string, number>(["b", 2], ["a", 1], ["c", 3]);
+    assert.throws(() => map.headMap("c").put("bb", 9), UnsupportedOperationException);
+  });
+
+  it("an unmodifiable wrapper around a range keeps the range's bounds", () => {
+    const base = letters();
+    const view = unmodifiableMap(base.headMap("carol"));
+    assert.deepEqual([...view.keys()], ["alice", "bob"]);
+    base.put("dave", 4);
+    assert.deepEqual([...view.keys()], ["alice", "bob"]);
+    assert.throws(() => view.put("bea", 9), UnsupportedOperationException);
   });
 });

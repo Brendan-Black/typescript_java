@@ -26,6 +26,25 @@ interface TreeMapState<K, V> {
   modCount: number;
 }
 
+/** One end of a range view: the key it is cut at, and whether that key is on the inside of the cut. */
+interface RangeBound<K> {
+  readonly key: K;
+  readonly inclusive: boolean;
+}
+
+/**
+ * The window a range view can see, as a pair of key bounds rather than a pair of indices. Keys, because the
+ * entries behind them move: an insertion into the parent shifts every index after it, where a bound expressed as
+ * a key still names the same place afterwards. See {@link TreeMap.subMap}.
+ *
+ * A `null` on either side means that side is open — {@link TreeMap.headMap} has no lower bound and
+ * {@link TreeMap.tailMap} no upper.
+ */
+interface RangeBounds<K> {
+  readonly from: RangeBound<K> | null;
+  readonly to: RangeBound<K> | null;
+}
+
 /**
  * Java's `TreeMap`: a map that keeps its keys in order rather than in buckets.
  *
@@ -61,6 +80,8 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
   /** `null` means natural order, so {@link comparator} can report that the way Java's `SortedMap` does */
   #comparator: ((a: K, b: K) => number) | null;
   #readOnly = false;
+  /** `null` for a map that is the whole map; a pair of bounds for one that is a range view of another */
+  #bounds: RangeBounds<K> | null = null;
 
   /**
    * @param comparator the order to keep the keys in. Omit it for natural order.
@@ -109,11 +130,14 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    *
    * The view shares the original's storage and its comparator, so later changes to the original show through —
    * see {@link JavaMap.unmodifiable} for why that is worth knowing before you hand one out.
+   *
+   * Wrapping a range view keeps its bounds, so an unmodifiable `subMap` sees exactly what the `subMap` did.
    */
   public static unmodifiable<K, V>(map: TreeMap<K, V>): TreeMap<K, V> {
     const view = new TreeMap<K, V>();
     view.#state = map.#state;
     view.#comparator = map.#comparator;
+    view.#bounds = map.#bounds;
     view.#readOnly = true;
     return view;
   }
@@ -137,13 +161,13 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
   }
 
   /**
-   * Binary search over the sorted entries.
+   * Binary search over every entry in the shared storage, bounds ignored.
    *
    * @returns the index of the key, or `-(insertionPoint) - 1` if it is absent — the same encoding
    *   {@link binarySearch} returns, and for the same reason: it keeps a miss at position 0 distinguishable from
    *   a hit at index 0.
    */
-  #indexOf(key: K): number {
+  #search(key: K): number {
     let low = 0;
     let high = this.#state.entries.length - 1;
     while (low <= high) {
@@ -161,46 +185,140 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
     return -(low + 1);
   }
 
-  /** The index of the first entry at (or, exclusively, after) `key`. Equal to the size when there is none. */
+  /**
+   * The index of the first entry this map can see: zero for a whole map, and wherever the lower bound falls for
+   * a range view.
+   *
+   * Recomputed on every call rather than stored, which is what keeps a range view live: the parent may have
+   * inserted or removed entries since the view was taken, and a stored index would be pointing at the wrong one.
+   */
+  #start(): number {
+    const from = this.#bounds?.from ?? null;
+    if (from === null) {
+      return 0;
+    }
+    const at = this.#search(from.key);
+    return at >= 0 ? (from.inclusive ? at : at + 1) : -(at + 1);
+  }
+
+  /** The index one past the last entry this map can see. See {@link #start}. */
+  #end(): number {
+    const to = this.#bounds?.to ?? null;
+    if (to === null) {
+      return this.#state.entries.length;
+    }
+    const at = this.#search(to.key);
+    return at >= 0 ? (to.inclusive ? at + 1 : at) : -(at + 1);
+  }
+
+  /**
+   * {@link #search}, restricted to what this map can see.
+   *
+   * A key outside the bounds reads as absent rather than as found elsewhere in the shared storage, and its
+   * insertion point is pulled to the nearer edge of the window — so every caller below sees a map that stops at
+   * its bounds, whatever the parent holds beyond them.
+   */
+  #indexOf(key: K): number {
+    const at = this.#search(key);
+    if (this.#bounds === null) {
+      return at;
+    }
+    const start = this.#start();
+    const end = this.#end();
+    if (at >= 0 && at >= start && at < end) {
+      return at;
+    }
+    const insertion = at >= 0 ? at : -(at + 1);
+    return -(Math.min(Math.max(insertion, start), end) + 1);
+  }
+
+  /** The index of the first entry at (or, exclusively, after) `key`. Equal to {@link #end} when there is none. */
   #lowerBound(key: K, inclusive: boolean): number {
     const at = this.#indexOf(key);
     return at >= 0 ? (inclusive ? at : at + 1) : -(at + 1);
   }
 
-  /** The index one past the last entry at (or, exclusively, before) `key`. Zero when there is none. */
+  /** The index one past the last entry at (or, exclusively, before) `key`. Equal to {@link #start} when none. */
   #upperBound(key: K, inclusive: boolean): number {
     const at = this.#indexOf(key);
     return at >= 0 ? (inclusive ? at + 1 : at) : -(at + 1);
   }
 
-  /** Whether an index landed on an actual entry rather than off either end of the map. */
-  #inRange(index: number): boolean {
-    return index >= 0 && index < this.#state.entries.length;
+  /** Whether an index landed on an entry this map can see, rather than off either end of its window. */
+  #visible(index: number): boolean {
+    return index >= this.#start() && index < this.#end();
   }
 
   /** The key at a position, or `null` if the position is off either end. */
   #keyAt(index: number): K | null {
-    return this.#inRange(index) ? this.#entryAt(index, "TreeMap navigation").key : null;
+    return this.#visible(index) ? this.#entryAt(index, "TreeMap navigation").key : null;
   }
 
   /** A {@link JavaMapEntry} snapshot of a position, or `null` if the position is off either end. */
   #snapshot(index: number): JavaMapEntry<K, V> | null {
-    if (!this.#inRange(index)) {
+    if (!this.#visible(index)) {
       return null;
     }
     const entry = this.#entryAt(index, "TreeMap navigation");
     return new JavaMapEntry<K, V>(entry.key, entry.value);
   }
 
-  /** A new map over a run of these entries, ordered the same way. The entries are copied, so it is not a view. */
-  #copyOfRange(from: number, to: number): TreeMap<K, V> {
-    const copy = new TreeMap<K, V>();
-    copy.#comparator = this.#comparator;
-    copy.#state = {
-      entries: this.#state.entries.slice(from, to).map((entry) => ({ key: entry.key, value: entry.value })),
-      modCount: 0,
-    };
-    return copy;
+  /**
+   * Whether a key falls inside this map's bounds. Always true for a map that is not a range view, which is what
+   * makes the checks below cost nothing on a whole map.
+   */
+  #withinBounds(key: K): boolean {
+    const from = this.#bounds?.from ?? null;
+    if (from !== null) {
+      const against = this.#compare(key, from.key);
+      if (against < 0 || (against === 0 && !from.inclusive)) {
+        return false;
+      }
+    }
+    const to = this.#bounds?.to ?? null;
+    if (to !== null) {
+      const against = this.#compare(key, to.key);
+      if (against > 0 || (against === 0 && !to.inclusive)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Whether a key may serve as the *bound* of a narrower range, which is the closed interval rather than the
+   * half-open one {@link #withinBounds} tests.
+   *
+   * An excluded endpoint still names a legal edge: `tailMap(30, false)` cannot contain 30, but
+   * `.headMap(30, false)` is a perfectly sensible empty range cut at the same place. Only an exclusive bound
+   * asking to *include* that key is a contradiction, and that is the case {@link #withinBounds} catches.
+   */
+  #withinClosedBounds(key: K): boolean {
+    const from = this.#bounds?.from ?? null;
+    if (from !== null && this.#compare(key, from.key) < 0) {
+      return false;
+    }
+    const to = this.#bounds?.to ?? null;
+    if (to !== null && this.#compare(key, to.key) > 0) {
+      return false;
+    }
+    return true;
+  }
+
+  #requireBoundWithin(key: K, inclusive: boolean, name: string): void {
+    if (!(inclusive ? this.#withinBounds(key) : this.#withinClosedBounds(key))) {
+      throw new IllegalArgumentException(`${name} ${String(key)} falls outside the bounds of this range.`);
+    }
+  }
+
+  /** A narrower window onto the same entries: live against them, and read-only if this map is. */
+  #rangeView(from: RangeBound<K> | null, to: RangeBound<K> | null): TreeMap<K, V> {
+    const view = new TreeMap<K, V>();
+    view.#state = this.#state;
+    view.#comparator = this.#comparator;
+    view.#readOnly = this.#readOnly;
+    view.#bounds = { from, to };
+    return view;
   }
 
   /**
@@ -214,7 +332,7 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
   }
 
   public override size(): number {
-    return this.#state.entries.length;
+    return Math.max(0, this.#end() - this.#start());
   }
 
   public override containsKey(key: K): boolean {
@@ -226,8 +344,16 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
     return at < 0 ? null : this.#entryAt(at, "TreeMap.get").value;
   }
 
+  /**
+   * @throws IllegalArgumentException if this map is a range view and the key falls outside its bounds. A range
+   *   writes through to the entries it is a window onto, so accepting a key it could not then see would put the
+   *   entry somewhere the caller cannot reach — Java's submaps refuse for the same reason.
+   */
   public override put(key: K, value: V): V | null {
     this.requireMutable("put");
+    if (!this.#withinBounds(key)) {
+      throw new IllegalArgumentException(`Key ${String(key)} falls outside the bounds of this range.`);
+    }
     const at = this.#indexOf(key);
     if (at >= 0) {
       const entry = this.#entryAt(at, "TreeMap.put");
@@ -248,6 +374,11 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
     return null;
   }
 
+  /**
+   * A key outside a range view's bounds reads as absent here rather than throwing, which is the asymmetry Java's
+   * submaps have too: removing something a range cannot see is already a no-op, where {@link put} would have had
+   * to invent a place to put it.
+   */
   protected override removeKey(key: K): V | null {
     this.requireMutable("remove");
     const at = this.#indexOf(key);
@@ -259,12 +390,15 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
     return removed.value;
   }
 
+  /** On a range view this empties the range, leaving everything the range cannot see where it was. */
   public override clear(): void {
     this.requireMutable("clear");
-    if (this.#state.entries.length === 0) {
+    const start = this.#start();
+    const end = this.#end();
+    if (start >= end) {
       return;
     }
-    this.#state.entries = [];
+    this.#state.entries.splice(start, end - start);
     this.#state.modCount++;
   }
 
@@ -275,10 +409,10 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    *   difference is Java's, between the older `SortedMap` and the `NavigableMap` that came after it.
    */
   public firstKey(): K {
-    if (this.#state.entries.length === 0) {
+    if (this.isEmpty()) {
       throw new NoSuchElementException("TreeMap.firstKey has no answer for an empty map.");
     }
-    return this.#entryAt(0, "TreeMap.firstKey").key;
+    return this.#entryAt(this.#start(), "TreeMap.firstKey").key;
   }
 
   /**
@@ -287,20 +421,20 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    * @throws NoSuchElementException if the map is empty. See {@link firstKey}.
    */
   public lastKey(): K {
-    if (this.#state.entries.length === 0) {
+    if (this.isEmpty()) {
       throw new NoSuchElementException("TreeMap.lastKey has no answer for an empty map.");
     }
-    return this.#entryAt(this.#state.entries.length - 1, "TreeMap.lastKey").key;
+    return this.#entryAt(this.#end() - 1, "TreeMap.lastKey").key;
   }
 
   /** Java's `NavigableMap.firstEntry`: the least entry, or `null` if the map is empty. */
   public firstEntry(): JavaMapEntry<K, V> | null {
-    return this.#snapshot(0);
+    return this.#snapshot(this.#start());
   }
 
   /** Java's `NavigableMap.lastEntry`: the greatest entry, or `null` if the map is empty. */
   public lastEntry(): JavaMapEntry<K, V> | null {
-    return this.#snapshot(this.#state.entries.length - 1);
+    return this.#snapshot(this.#end() - 1);
   }
 
   /**
@@ -356,12 +490,12 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    * priority queue.
    */
   public pollFirstEntry(): JavaMapEntry<K, V> | null {
-    return this.#poll(0, "pollFirstEntry");
+    return this.#poll(this.#start(), "pollFirstEntry");
   }
 
   /** Java's `NavigableMap.pollLastEntry`: removes and returns the greatest entry, or `null`. */
   public pollLastEntry(): JavaMapEntry<K, V> | null {
-    return this.#poll(this.#state.entries.length - 1, "pollLastEntry");
+    return this.#poll(this.#end() - 1, "pollLastEntry");
   }
 
   #poll(index: number, operation: string): JavaMapEntry<K, V> | null {
@@ -378,29 +512,37 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
   /**
    * Java's `SortedMap.headMap`: the entries whose keys are below `toKey`.
    *
-   * A copy rather than a view, which is where this departs from Java. A live range view has to write through to
-   * its parent and reject keys that fall outside its bounds, and {@link JavaList.subList} already made the same
-   * call for the same reason. Mutating the result here leaves this map alone.
+   * A live view, as Java's is. It reads and writes the same entries this map holds, so changes go both ways:
+   * putting through the range puts into this map, and putting into this map inside the range shows up through
+   * it. What the range cannot do is reach outside its bounds — {@link put} refuses a key it could not then see.
+   *
+   * The bound is a key rather than a position, so it keeps its meaning as entries come and go around it. A
+   * `headMap(30)` taken before 25 is inserted contains 25 afterwards.
    *
    * @param inclusive whether `toKey` itself is included. Defaults to `false`, which is Java's two-argument form.
+   * @throws IllegalArgumentException if this map is itself a range view and `toKey` falls outside its bounds
    */
   public headMap(toKey: K, inclusive: boolean = false): TreeMap<K, V> {
-    return this.#copyOfRange(0, this.#upperBound(toKey, inclusive));
+    this.#requireBoundWithin(toKey, inclusive, "toKey");
+    return this.#rangeView(this.#bounds?.from ?? null, { key: toKey, inclusive });
   }
 
   /**
-   * Java's `SortedMap.tailMap`: the entries whose keys are at or above `fromKey`. A copy, like {@link headMap}.
+   * Java's `SortedMap.tailMap`: the entries whose keys are at or above `fromKey`. A live view, like
+   * {@link headMap}.
    *
    * @param inclusive whether `fromKey` itself is included. Defaults to `true`, which is Java's two-argument form
    *   — note that this default is the opposite of {@link headMap}'s, so that `headMap(k)` and `tailMap(k)`
    *   partition the map between them without overlapping or dropping `k`.
+   * @throws IllegalArgumentException if this map is itself a range view and `fromKey` falls outside its bounds
    */
   public tailMap(fromKey: K, inclusive: boolean = true): TreeMap<K, V> {
-    return this.#copyOfRange(this.#lowerBound(fromKey, inclusive), this.#state.entries.length);
+    this.#requireBoundWithin(fromKey, inclusive, "fromKey");
+    return this.#rangeView({ key: fromKey, inclusive }, this.#bounds?.to ?? null);
   }
 
   /**
-   * Java's `SortedMap.subMap`: the entries whose keys fall in a range. A copy, like {@link headMap}.
+   * Java's `SortedMap.subMap`: the entries whose keys fall in a range. A live view, like {@link headMap}.
    *
    * Defaults to `[fromKey, toKey)` — inclusive at the bottom, exclusive at the top — matching Java's
    * two-argument form and the half-open convention everything else here uses.
@@ -410,13 +552,17 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    * the same time, with nothing at runtime able to tell which was meant. Same reason
    * {@link JavaList.removeAt} exists.
    *
-   * @throws IllegalArgumentException if the range runs backwards, as Java's does
+   * @throws IllegalArgumentException if the range runs backwards, as Java's does, or if this map is itself a
+   *   range view and either bound falls outside it — which is also what stops a range being widened by
+   *   narrowing it twice
    */
   public subMap(fromKey: K, toKey: K, fromInclusive: boolean = true, toInclusive: boolean = false): TreeMap<K, V> {
     if (this.#compare(fromKey, toKey) > 0) {
       throw new IllegalArgumentException(`subMap range is inverted: ${String(fromKey)} is above ${String(toKey)}.`);
     }
-    return this.#copyOfRange(this.#lowerBound(fromKey, fromInclusive), this.#upperBound(toKey, toInclusive));
+    this.#requireBoundWithin(fromKey, fromInclusive, "fromKey");
+    this.#requireBoundWithin(toKey, toInclusive, "toKey");
+    return this.#rangeView({ key: fromKey, inclusive: fromInclusive }, { key: toKey, inclusive: toInclusive });
   }
 
   /**
@@ -430,7 +576,10 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
     const ascending = (a: K, b: K): number => this.#compare(a, b);
     const descending = new TreeMap<K, V>((a, b) => ascending(b, a));
     descending.#state = {
-      entries: this.#state.entries.map((entry) => ({ key: entry.key, value: entry.value })).reverse(),
+      entries: this.#state.entries
+        .slice(this.#start(), this.#end())
+        .map((entry) => ({ key: entry.key, value: entry.value }))
+        .reverse(),
       modCount: 0,
     };
     return descending;
@@ -443,7 +592,8 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    */
   public *descendingKeys(): IterableIterator<K> {
     const expected = this.#state.modCount;
-    for (let i = this.#state.entries.length - 1; i >= 0; i--) {
+    const start = this.#start();
+    for (let i = this.#end() - 1; i >= start; i--) {
       if (this.#state.modCount !== expected) {
         throw new ConcurrentModificationException("The map was modified while it was being iterated.");
       }
@@ -454,7 +604,8 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
   /** The entries, greatest first, as {@link JavaMapEntry} snapshots. Fail-fast, like {@link Symbol.iterator}. */
   public *descendingEntries(): IterableIterator<JavaMapEntry<K, V>> {
     const expected = this.#state.modCount;
-    for (let i = this.#state.entries.length - 1; i >= 0; i--) {
+    const start = this.#start();
+    for (let i = this.#end() - 1; i >= start; i--) {
       if (this.#state.modCount !== expected) {
         throw new ConcurrentModificationException("The map was modified while it was being iterated.");
       }
@@ -473,7 +624,8 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    */
   public override *[Symbol.iterator](): IterableIterator<[K, V]> {
     const expected = this.#state.modCount;
-    for (let i = 0; i < this.#state.entries.length; i++) {
+    const end = this.#end();
+    for (let i = this.#start(); i < end; i++) {
       if (this.#state.modCount !== expected) {
         throw new ConcurrentModificationException("The map was modified while it was being iterated.");
       }

@@ -54,7 +54,7 @@ both false for structurally equal objects; `JavaList.contains` and `JavaList.ind
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (547 tests); the serialization layer is one interface and little more. See
+hierarchy are complete and tested (569 tests); the serialization layer is one interface and little more. See
 [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -230,6 +230,26 @@ The full `NavigableMap` / `NavigableSet` surface is there: `first`/`last`, `floo
 take an optional comparator ahead of their contents, so `new TreeSet(reverseOrder<string>(), names)` reads the
 way Java's constructor does; with none, the keys are ordered by `compareOf`.
 
+The ranges are **live views**, as Java's are — a window onto the same entries rather than a copy of them:
+
+```ts
+const scores = new TreeMap<string, number>([["alice", 1], ["bob", 2], ["carol", 3]]);
+const early = scores.subMap("a", "c");
+
+early.put("bea", 9);      // writes through: scores now holds bea=9
+scores.put("bo", 5);      // and reads through: early now holds it too
+early.remove("dave");     // outside the bounds, so it is simply absent — no throw
+early.put("dave", 4);     // but writing outside them throws IllegalArgumentException
+```
+
+A range is bounded by *keys*, not positions, so it keeps its meaning as entries come and go around it. Writing
+through one is the difference from `List.subList`, which is still a copy: a list's bound is a position, and
+there is no way to say which side of it an insertion belongs on.
+
+Because a range writes through, one taken off an unmodifiable map or off `TreeMap.of` is unmodifiable too, and
+narrowing a range can only ever narrow it — `subMap("a", "c").tailMap("z")` throws rather than handing back keys
+the original range could not see.
+
 Both share their derived operations with `JavaMap` and `JavaSet` — `TreeMap` extends the same `JavaAbstractMap`
 that `JavaMap` does, so `merge`, the `compute` family and the three live views behave identically, and a
 `TreeMap` `equals` a `JavaMap` holding the same entries.
@@ -358,7 +378,7 @@ all the collections need — the pair form and the array form both feed straight
 | `Iterator.remove` on an unmodifiable collection | order of the two checks varies by implementation | refuses before complaining about call order | "This cannot be removed from" is the more useful of the two answers, and it is what `Collections.unmodifiableCollection`'s iterator gives |
 | `Collections.max` / `min` | takes a `Collection` | takes any `Iterable` | An array or a plain `Set` is as good an input, and nothing in the algorithm needs more |
 | `TreeMap` storage | red-black tree | one sorted array | Lookups are O(log n) either way; insertion and removal are O(n) here. In exchange every navigation and range question is index arithmetic, which is why they are all present and all obviously correct |
-| `TreeMap.headMap` / `subMap`, `TreeSet.headSet` / `subSet` | live views | copies | Same reason as `List.subList`, plus a live range view has to reject keys outside its own bounds |
+| `TreeMap.descendingMap`, `TreeSet.descendingSet` | live views | copies, ordered by the reversed comparator | A sorted collection in its own right rather than a reversed reading of another one; `descendingKeys()` covers the walk without the copy |
 | `subMap` / `subSet` bounds | `(from, fromInclusive, to, toInclusive)` | `(from, to, fromInclusive?, toInclusive?)` | A `TreeMap<boolean, V>` would make the second argument a key and a flag at once, with nothing at runtime able to tell which was meant |
 | `TreeMap.descendingKeySet` | live `NavigableSet` | `descendingKeys()` iterator, or `descendingMap()` | The view is almost always immediately walked; `descendingMap()` covers the rest and is a sorted map in its own right |
 | `new TreeMap<Point, V>()` | compiles, throws at the first comparison | same | TypeScript cannot constrain a class's type parameter per constructor. Pass `naturalOrder<K>()` — which *is* constrained — to move the check to compile time |
@@ -372,9 +392,6 @@ module, and `NotImplementedException`.
   one interface and `toJSON` on the collections and `Optional`; there is no framework-specific support, and
   nothing types the parse direction — a contract for that belongs with the layer that needs it.
 - **XML parsing** (JavaBeans). Not started.
-- **Live range views** from `TreeMap.headMap` / `subMap` and `TreeSet.headSet` / `subSet`, which today are copies.
-  What remains is bounds-checking writes made through a range and keeping a range and its parent's modification
-  counts in step.
 
 ## Development
 
