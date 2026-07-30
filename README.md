@@ -21,13 +21,13 @@ new Set([new Point(1, 2), new Point(1, 2)]).size; // 2
 ```
 
 There is no hook to fix this. `Map` does not consult your class, and no amount of care at the call site changes
-that. A `JavaMap` buckets by `hashCode()` and resolves collisions with `equals()`, so a value type behaves as a key
+that. A `Java.Map` buckets by `hashCode()` and resolves collisions with `equals()`, so a value type behaves as a key
 exactly the way it would on the JVM:
 
 ```ts
-import { JavaObject, JavaMap, JavaSet, boilerplateEqualityCheck, hashAll } from "typescript-java";
+import { Java, boilerplateEqualityCheck } from "typescript-java";
 
-class Point extends JavaObject {
+class Point extends Java.Object {
   constructor(public readonly x: number, public readonly y: number) {
     super();
   }
@@ -37,24 +37,76 @@ class Point extends JavaObject {
   }
 
   public override hashCode(): number {
-    return hashAll(this.x, this.y);
+    return Java.Objects.hash(this.x, this.y);
   }
 }
 
-const seen = new JavaMap<Point, string>();
+const seen = new Java.Map<Point, string>();
 seen.put(new Point(1, 2), "origin-ish");
 seen.get(new Point(1, 2)); // "origin-ish"
 
-new JavaSet([new Point(1, 2), new Point(1, 2)]).size(); // 1
+new Java.Set([new Point(1, 2), new Point(1, 2)]).size(); // 1
 ```
 
 The same blind spot runs through the rest of the standard library. `[p1].includes(p2)` and `array.indexOf(p2)` are
-both false for structurally equal objects; `JavaList.contains` and `JavaList.indexOf` are not.
+both false for structurally equal objects; `Java.List.contains` and `Java.List.indexOf` are not.
+
+## The `Java` namespace
+
+Everything above is reached through one exported namespace. The names inside it are Java's own — `Java.Map`,
+`Java.Object`, `Java.Collections.sort` — because the `Java` prefix that the flat exports carry exists only to
+keep `Object`, `Map`, `Set`, `List` and `Iterator` from colliding with JavaScript's globals at module scope. A
+namespace is the qualifier that makes the prefix unnecessary.
+
+```ts
+import { Java } from "typescript-java";
+
+class Point extends Java.Object { }
+const seen = new Java.Map<Point, string>();
+const order: Java.Comparator<string> = Java.Comparator.naturalOrder<string>();
+Java.Collections.sort(names);
+```
+
+`Java.Map` **is** `JavaMap` — the namespace re-exports the bindings rather than wrapping them, so `instanceof`
+and identity hold across both spellings and there is no cost to either. The classes keep their prefixed
+*declaration* names and are renamed only at the namespace boundary, which is deliberate: `JavaMap` stores its
+buckets in a real `Map` and `JavaObject` calls the real `Object.getPrototypeOf`, so a class actually named
+`Map` or `Object` would shadow the global it depends on. It also leaves `constructor.name` alone, so a
+`Java.Map` still renders as `JavaMap@1f45` in `toString()`.
+
+The flat exports remain and still work. They are **deprecated** in favour of the namespaced spelling and will
+be removed before 1.0; an editor will strike them through and offer the replacement.
+
+Java's static-utility classes are sub-namespaces, which restores the reading they have in Java — and lets three
+functions drop the suffix they only ever carried for disambiguation:
+
+| Flat export | Namespaced | Note |
+| --- | --- | --- |
+| `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap` | `Java.Collections.*` | unusually generic names to take from a package root |
+| `emptyList`, `singletonMap`, `unmodifiableSet`, … | `Java.Collections.*` | |
+| `requireNonNull`, `isNull`, `nonNull`, … | `Java.Objects.*` | |
+| `hashCodeOf` | `Java.Objects.hashCode` | the `Of` existed only to avoid a bare `hashCode` |
+| `equalsOf` | `Java.Objects.equals` | |
+| `hashAll` | `Java.Objects.hash` | Java's own name for it |
+| `compareOf` | `Java.Objects.compare` | |
+| `comparing`, `naturalOrder`, `nullsFirst`, … | `Java.Comparator.*` | |
+| `comparator` | `Java.Comparator.of` | no Java counterpart; there a lambda already *is* a `Comparator` |
+| `TSJavaException` | `Java.Throwable` | the concept it stands in for |
+
+`Java.Comparator` is both the type and its statics, as it is in Java — `Java.Comparator<T>` annotates and
+`Java.Comparator.comparing(f)` constructs. TypeScript keeps types and values in separate declaration spaces,
+which is what allows one name to carry both.
+
+**What is not in the namespace:** anything without a `java.lang`, `java.util` or `java.io` counterpart. The
+`JsonReader` and `XmlReader` layers model Jackson and JAXB rather than the standard library, so they keep their
+top-level exports along with `JsonBindException`, `XmlBindException` and `XmlParseException`; so do
+`boilerplateEqualityCheck` and the `Contracts` module, which are this library's own tooling. `Java.*` is the
+standard library and nothing else.
 
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (669 tests); the serialization layer covers both directions of a JSON wire
+hierarchy are complete and tested (681 tests); the serialization layer covers both directions of a JSON wire
 contract and reads XML, parser and all. See [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -72,19 +124,25 @@ npm install github:Brendan-Black/typescript_java
 
 ## What's in the box
 
+| Namespaced | Flat (deprecated) |
+| --- | --- |
+| `Java.Object` | `JavaObject` |
+| `Java.Optional` | `Optional` |
+| `Java.Comparable`, `Java.NaturallyOrdered` | `Comparable`, `NaturallyOrdered` |
+| `Java.Comparator` — the type, plus `.of`, `.comparing`, `.naturalOrder`, `.reverseOrder`, `.nullsFirst`, `.nullsLast` | `Comparator`, `comparator`, `comparing`, `naturalOrder`, `reverseOrder`, `nullsFirst`, `nullsLast` |
+| `Java.Objects` — `.requireNonNull`, `.requireNonNullElse`, `.requireNonNullElseGet`, `.isNull`, `.nonNull`, `.hashCode`, `.equals`, `.hash`, `.compare` | `requireNonNull`, `requireNonNullElse`, `requireNonNullElseGet`, `isNull`, `nonNull`, `hashCodeOf`, `equalsOf`, `hashAll`, `compareOf` |
+| `Java.Collection`, `Java.AbstractSet`, `Java.AbstractMap`, `Java.Iterator`, `Java.ListIterator`, `Java.List`, `Java.Set`, `Java.Map`, `Java.MapEntry`, `Java.TreeMap`, `Java.TreeSet` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaIterator`, `JavaListIterator`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
+| `Java.Collections` — `.sort`, `.max`, `.min`, `.binarySearch`, `.reverse`, `.swap`, `.emptyList`, `.emptyMap`, `.emptySet`, `.singleton`, `.singletonList`, `.singletonMap`, `.unmodifiableList`, `.unmodifiableMap`, `.unmodifiableSet` | the same names, unqualified |
+| `Java.Throwable` and 13 subclasses, less the three binding failures | `TSJavaException` and 13 subclasses |
+| `Java.Serializable` (type only) | `Serializable` |
+
+Not namespaced — no `java.*` counterpart:
+
 | Module | Exports |
 | --- | --- |
-| `fundamentals/Object` | `JavaObject`, `boilerplateEqualityCheck` |
-| `fundamentals/Hashing` | `hashCodeOf`, `equalsOf`, `hashAll` |
-| `fundamentals/Objects` | `requireNonNull`, `requireNonNullElse`, `requireNonNullElseGet`, `isNull`, `nonNull` |
-| `fundamentals/Optional` | `Optional` |
-| `fundamentals/Comparable` | `Comparable`, `NaturallyOrdered`, `compareOf` |
-| `fundamentals/Comparator` | `Comparator`, `comparator`, `comparing`, `naturalOrder`, `reverseOrder`, `nullsFirst`, `nullsLast` |
+| `fundamentals/Object` | `boilerplateEqualityCheck` |
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
-| `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaIterator`, `JavaListIterator`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
-| `collections/Collections` | `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap`, `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
-| `exceptions` | `TSJavaException` and 13 subclasses |
-| `serialization/Serializable` | `Serializable` (type only) |
+| `exceptions` | `JsonBindException`, `XmlBindException`, `XmlParseException` |
 | `serialization/JsonReader` | `JsonReader`, `JsonFields`, `readJson`, `objectOf`, `listOf`, `setOf`, `mapOf`, `objectAsMap`, `treeSetOf`, `treeMapOf`, `entryOf`, `arrayOf`, `stringValue`, `numberValue`, `integerValue`, `booleanValue`, `unknownValue`, `enumOf`, `nullable`, `optionalValue`, `withDefault`, `mapping` |
 | `serialization/XmlParser` | `parseXml`, `XmlElement` |
 | `serialization/XmlReader` | `XmlReader`, `XmlTextReader`, `XmlField`, `XmlFields`, `readXml`, `elementOf`, `elementNamed`, `textElement`, `mappingElement`, `attribute`, `optionalAttribute`, `textContent`, `child`, `optionalChild`, `childText`, `children`, `wrappedChildren`, `stringText`, `rawText`, `numberText`, `integerText`, `booleanText`, `enumText`, `mappingText` |
@@ -109,13 +167,13 @@ const email = users.find("ada").map((u) => u.email).orElse("(none)");
 const found = [maybeA, maybeB, maybeC].flatMap((o) => [...o]);
 ```
 
-`JavaMap.find(key)` is the unambiguous `get`: Java's `get` returns `null` both for an absent key and for a key
+`Java.Map.find(key)` is the unambiguous `get`: Java's `get` returns `null` both for an absent key and for a key
 mapped to `null`, and `find` returns an `Optional` instead. (A key mapped to `null` still yields an empty Optional
 — only `containsKey` separates those two cases.)
 
 ### Collections
 
-`JavaMap` is Java's `LinkedHashMap`: insertion-ordered, fail-fast, with live write-through `keySet()`, `values()`
+`Java.Map` is Java's `LinkedHashMap`: insertion-ordered, fail-fast, with live write-through `keySet()`, `values()`
 and `entrySet()` views, and the full set of mutators — `merge`, `compute`, `computeIfAbsent`, `computeIfPresent`,
 `putIfAbsent`, and both overloads of `replace` and `remove`.
 
@@ -135,7 +193,7 @@ for (const p of list) {
 Unmodifiable wrappers are *views*, not copies, which is Java's behaviour and the usual source of surprise with it:
 
 ```ts
-const view = JavaList.unmodifiable(backing);
+const view = Java.List.unmodifiable(backing);
 backing.add(3);
 view.toString(); // "[1, 2, 3]" — changes to the original show through
 view.add(4);     // UnsupportedOperationException
@@ -169,10 +227,10 @@ A `JavaIterator` is also `Iterable`, which Java's `Iterator` is not, so a half-c
 straight to anything taking a sequence and picks up from where the cursor already is:
 
 ```ts
-const rest = new JavaList<string>(it); // whatever next() has not yet reached
+const rest = new Java.List<string>(it); // whatever next() has not yet reached
 ```
 
-`JavaList.listIterator()` is Java's `ListIterator`: the same cursor, plus `hasPrevious`, `previous`, `nextIndex`,
+`Java.List.listIterator()` is Java's `ListIterator`: the same cursor, plus `hasPrevious`, `previous`, `nextIndex`,
 `previousIndex`, `set` and `add`. The cursor sits *between* elements, which is why `next()` followed by
 `previous()` hands back the same element twice, and why starting at `size()` walks the list backwards:
 
@@ -191,14 +249,14 @@ returns what was just inserted. It is the one way to grow a list while walking i
 `next()` or `previous()` to have returned something they can act on, and an `add` or `remove` clears that — so
 `IllegalStateException` is what you get for asking out of turn.
 
-`Collections` carries Java's algorithms as well as its factories — `sort`, `max`, `min`, `binarySearch`,
+`Java.Collections` carries Java's algorithms as well as its factories — `sort`, `max`, `min`, `binarySearch`,
 `reverse` and `swap`. Each comes in two forms, as Java's do: one taking a comparator, and one taking none and
 using natural order.
 
 ```ts
-sort(names);                                       // natural order
-sort(users, comparing<User, number>((u) => u.age));
-max(scores);
+Java.Collections.sort(names);                       // natural order
+Java.Collections.sort(users, Java.Comparator.comparing<User, number>((u) => u.age));
+Java.Collections.max(scores);
 ```
 
 The comparator-free form constrains its element type, so `sort(listOfPoints)` is a compile error rather than a
@@ -207,7 +265,7 @@ half included — a miss is `-(insertionPoint) - 1`, offset by one so that an in
 distinguishable from a hit at index `0`:
 
 ```ts
-const at = binarySearch(sorted, key);
+const at = Java.Collections.binarySearch(sorted, key);
 if (at < 0) {
   sorted.addAt(-(at + 1), key); // keeps it sorted
 }
@@ -215,11 +273,11 @@ if (at < 0) {
 
 ### Sorted collections
 
-`TreeMap` and `TreeSet` keep their keys in order instead of in buckets — which is what you want when the key
+`Java.TreeMap` and `Java.TreeSet` keep their keys in order instead of in buckets — which is what you want when the key
 type has a sensible order but no trustworthy hash, and it is the only way to ask the questions on the right:
 
 ```ts
-const scores = new TreeMap<string, number>([["carol", 3], ["alice", 1], ["bob", 2]]);
+const scores = new Java.TreeMap<string, number>([["carol", 3], ["alice", 1], ["bob", 2]]);
 
 [...scores.keys()];       // ["alice", "bob", "carol"] — key order, not insertion order
 scores.firstKey();        // "alice"
@@ -230,13 +288,13 @@ scores.pollFirstEntry();  // removes and returns alice=1
 
 The full `NavigableMap` / `NavigableSet` surface is there: `first`/`last`, `floor`/`ceiling`/`lower`/`higher`,
 `poll` from either end, `headMap`/`tailMap`/`subMap` (and the `Set` equivalents), and descending views. Both
-take an optional comparator ahead of their contents, so `new TreeSet(reverseOrder<string>(), names)` reads the
-way Java's constructor does; with none, the keys are ordered by `compareOf`.
+take an optional comparator ahead of their contents, so `new Java.TreeSet(Java.Comparator.reverseOrder<string>(),
+names)` reads the way Java's constructor does; with none, the keys are ordered by `Java.Objects.compare`.
 
 The ranges are **live views**, as Java's are — a window onto the same entries rather than a copy of them:
 
 ```ts
-const scores = new TreeMap<string, number>([["alice", 1], ["bob", 2], ["carol", 3]]);
+const scores = new Java.TreeMap<string, number>([["alice", 1], ["bob", 2], ["carol", 3]]);
 const early = scores.subMap("a", "c");
 
 early.put("bea", 9);      // writes through: scores now holds bea=9
@@ -249,13 +307,13 @@ A range is bounded by *keys*, not positions, so it keeps its meaning as entries 
 through one is the difference from `List.subList`, which is still a copy: a list's bound is a position, and
 there is no way to say which side of it an insertion belongs on.
 
-Because a range writes through, one taken off an unmodifiable map or off `TreeMap.of` is unmodifiable too, and
+Because a range writes through, one taken off an unmodifiable map or off `Java.TreeMap.of` is unmodifiable too, and
 narrowing a range can only ever narrow it — `subMap("a", "c").tailMap("z")` throws rather than handing back keys
 the original range could not see.
 
-Both share their derived operations with `JavaMap` and `JavaSet` — `TreeMap` extends the same `JavaAbstractMap`
-that `JavaMap` does, so `merge`, the `compute` family and the three live views behave identically, and a
-`TreeMap` `equals` a `JavaMap` holding the same entries.
+Both share their derived operations with `Java.Map` and `Java.Set` — `Java.TreeMap` extends the same
+`Java.AbstractMap` that `Java.Map` does, so `merge`, the `compute` family and the three live views behave identically, and a
+`Java.TreeMap` `equals` a `Java.Map` holding the same entries.
 
 One thing to keep in mind, and it is Java's rule too: a sorted collection decides what counts as the same key by
 **comparing**, not by `equals`. Two keys that compare equal are one entry, whatever `equals` says — which is the
@@ -267,7 +325,9 @@ consistency-with-equals contract on `Comparable` asking to be honoured.
 combinators over them:
 
 ```ts
-import { comparing, naturalOrder, nullsLast } from "typescript-java";
+import { Java } from "typescript-java";
+
+const { comparing, naturalOrder, nullsLast } = Java.Comparator;
 
 users.sort(comparing<User, string>((u) => u.surname).thenComparing((u) => u.forename));
 names.sort(naturalOrder<string>());
@@ -276,17 +336,18 @@ names.sort(naturalOrder<string>());
 rows.sort(comparing<Row, number | null>((r) => r.score, nullsLast(naturalOrder<number>())));
 ```
 
-A `Comparator` here *is* a comparison function, so it goes straight into `JavaList.sort` or
-`Array.prototype.sort`; it just carries `reversed()`, `then()` and `thenComparing()` as well. `comparator(fn)`
-lifts a plain arrow function into one, which is the step Java's compiler does for you when it turns a lambda into
-a functional interface.
+A `Comparator` here *is* a comparison function, so it goes straight into `Java.List.sort` or
+`Array.prototype.sort`; it just carries `reversed()`, `then()` and `thenComparing()` as well.
+`Java.Comparator.of(fn)` lifts a plain arrow function into one, which is the step Java's compiler does for you
+when it turns a lambda into a functional interface — and the one member of `Java.Comparator` that Java itself
+has no need for.
 
 `naturalOrder<T>()` will not compile unless `T` actually has an order — a primitive Java orders, a `Date`, or
 something implementing `Comparable`. That is the same guarantee Java gets from `<T extends Comparable<? super
 T>>`, and it turns a `ClassCastException` at sort time into a red squiggle.
 
-Underneath is `compareOf(a, b)`, which sits alongside `hashCodeOf` and `equalsOf` and reproduces Java's
-comparison semantics rather than JavaScript's:
+Underneath is `Java.Objects.compare(a, b)`, which sits alongside `Java.Objects.hashCode` and
+`Java.Objects.equals` and reproduces Java's comparison semantics rather than JavaScript's:
 
 ```ts
 [3, NaN, 1, 2].sort((a, b) => a - b);        // [3, NaN, 1, 2] — the comparator returns NaN, so nothing moves
@@ -312,8 +373,8 @@ the collections say something, once per class, on insertion:
 
 ```
 [typescript-java] Broken overrides equals() but not hashCode(), so its instances will be bucketed by identity
-and cannot be found again in a JavaMap or JavaSet. Override hashCode() from the same fields equals() compares —
-hashAll(...) does this in one line. Silence with setHashContractChecks(false).
+and cannot be found again in a Java.Map or Java.Set. Override hashCode() from the same fields equals() compares —
+Java.Objects.hash(...) does this in one line. Silence with setHashContractChecks(false).
 ```
 
 A second warning fires when a hash bucket grows past eight entries, which here means the key class is producing
@@ -335,23 +396,23 @@ XML at all has no slots yet.
 
 ### Serialization
 
-`JavaList`, `JavaSet`, `JavaMap`, `TreeMap`, `TreeSet`, `JavaMapEntry` and `Optional` implement `Serializable`, so `JSON.stringify`
-produces something a caller would expect:
+`Java.List`, `Java.Set`, `Java.Map`, `Java.TreeMap`, `Java.TreeSet`, `Java.MapEntry` and `Java.Optional` implement
+`Java.Serializable`, so `JSON.stringify` produces something a caller would expect:
 
 ```ts
-JSON.stringify(new JavaMap([["a", 1], ["b", 2]])); // [["a",1],["b",2]]
-JSON.stringify(JavaList.of(1, 2));                 // [1,2]
+JSON.stringify(new Java.Map([["a", 1], ["b", 2]])); // [["a",1],["b",2]]
+JSON.stringify(Java.List.of(1, 2));                 // [1,2]
 ```
 
 A map serialises as pairs rather than as an object deliberately: JSON object keys can only be strings, so a map
-keyed on numbers, nulls or `JavaObject`s would either collide or lose information. The pair form round-trips
+keyed on numbers, nulls or `Java.Object`s would either collide or lose information. The pair form round-trips
 straight back through the constructor.
 
 An `Optional` serialises as the value it holds, or as `null` when empty — the wrapper leaves no trace on the wire:
 
 ```ts
-JSON.stringify({ nickname: Optional.of("addie") }); // {"nickname":"addie"}
-JSON.stringify({ nickname: Optional.empty() });     // {"nickname":null}
+JSON.stringify({ nickname: Java.Optional.of("addie") }); // {"nickname":"addie"}
+JSON.stringify({ nickname: Java.Optional.empty() });     // {"nickname":null}
 ```
 
 This is the shape Jackson's `Jdk8Module` produces for a Java DTO, and it is the only shape that makes `Optional`
@@ -370,7 +431,7 @@ field the server renamed becomes `undefined` and travels a long way before anyth
 throws `JsonBindException` naming the slot that was wrong.
 
 ```ts
-interface Order { id: number; status: "PENDING" | "SHIPPED"; lines: JavaList<string>; note: Optional<string>; }
+interface Order { id: number; status: "PENDING" | "SHIPPED"; lines: Java.List<string>; note: Java.Optional<string>; }
 
 const order = objectOf<Order>({
   id: integerValue,
@@ -379,7 +440,7 @@ const order = objectOf<Order>({
   note: optionalValue(stringValue),
 });
 
-readJson(body, listOf(order)); // JavaList<Order>, or a JsonBindException saying where it went wrong
+readJson(body, listOf(order)); // Java.List<Order>, or a JsonBindException saying where it went wrong
 ```
 
 ```
@@ -430,7 +491,7 @@ element to look, and an `XmlReader` assembles the two into a `T`:
 
 ```ts
 interface Item { sku: string; quantity: number; }
-interface Order { id: string; total: number; note: Optional<string>; items: JavaList<Item>; }
+interface Order { id: string; total: number; note: Java.Optional<string>; items: Java.List<Item>; }
 
 const item = elementOf<Item>({
   sku: attribute("sku"),
@@ -475,7 +536,7 @@ one. DTDs are skipped rather than honoured, so an undeclared entity is a failure
 | `null` vs `undefined` | no `undefined` | folded together as "absent" | Except in `equalsOf`, where a map keeps them distinct rather than silently rewriting one of your keys |
 | `Optional` | not `Serializable` | serialises as the value, or `null` | Java's is a return type, not a field; here it is exactly what a DTO wants to hold, and the wire form matches what Jackson emits for one |
 | `Comparator.thenComparing` | overloaded on `Comparator` and on a key extractor | `then` / `thenComparing` | A comparator is *structurally* a key extractor returning a number, so the overload would resolve silently and wrongly. Java needs a cast to break the same tie |
-| `List.sort` | any comparator, every element | same | `Array.prototype.sort` hoists `undefined` entries to the end without ever consulting the comparator; `JavaList.sort` sorts positions so that nothing is hidden from it |
+| `List.sort` | any comparator, every element | same | `Array.prototype.sort` hoists `undefined` entries to the end without ever consulting the comparator; `Java.List.sort` sorts positions so that nothing is hidden from it |
 | `Collection.removeIf` | removes through the iterator, element by element | chooses from a snapshot, removes by value | The two differ only for a predicate that accepts one of two `equals` elements and not the other; `iterator()` is exact where that matters |
 | `Iterator` | not `Iterable` | `Iterable` too | Everything here that takes a sequence takes an `Iterable`, and wrapping a half-consumed cursor to hand it on would be a step for nothing |
 | `Iterator.remove` on an unmodifiable collection | order of the two checks varies by implementation | refuses before complaining about call order | "This cannot be removed from" is the more useful of the two answers, and it is what `Collections.unmodifiableCollection`'s iterator gives |
@@ -485,9 +546,14 @@ one. DTDs are skipped rather than honoured, so an undeclared entity is a failure
 | `subMap` / `subSet` bounds | `(from, fromInclusive, to, toInclusive)` | `(from, to, fromInclusive?, toInclusive?)` | A `TreeMap<boolean, V>` would make the second argument a key and a flag at once, with nothing at runtime able to tell which was meant |
 | `TreeMap.descendingKeySet` | live `NavigableSet` | `descendingKeys()` iterator, or `descendingMap()` | The view is almost always immediately walked; `descendingMap()` covers the rest and is a sorted map in its own right |
 | XML parsing | a conforming parser: DTDs, entity declarations, namespace resolution, mixed content | elements, attributes, text, `CDATA`, the five built-in entities; a doctype is skipped and prefixes are left on names | Each omitted piece is refused or ignored explicitly rather than half-implemented. A parser that reads a DTD and applies none of it would be lying about the document it produced |
-| `new TreeMap<Point, V>()` | compiles, throws at the first comparison | same | TypeScript cannot constrain a class's type parameter per constructor. Pass `naturalOrder<K>()` — which *is* constrained — to move the check to compile time |
+| `new TreeMap<Point, V>()` | compiles, throws at the first comparison | same | TypeScript cannot constrain a class's type parameter per constructor. Pass `Java.Comparator.naturalOrder<K>()` — which *is* constrained — to move the check to compile time |
+| `java.lang` / `java.util` packages | `import java.util.Map` | one flat `Java` namespace | The split is an artefact of Java's own history — `Objects` in `java.util`, `Object` in `java.lang` — and reproducing it would make every use site longer without answering a question anyone asks |
+| `Map.Entry` | nested in `Map` | `Java.MapEntry` | Nesting it would mean making it a static member of `Java.Map`, which it is not; it is its own class |
+| `Throwable` | the root of everything throwable | `Java.Throwable` roots only this library's hierarchy | It extends `Error`, so `catch (e) { if (e instanceof Java.Throwable) }` catches what this library raises and nothing else. That is the useful behaviour; the name says which concept it stands in for, not that it has Java's reach |
+| `Objects.compare` | `compare(a, b, comparator)` | `Java.Objects.compare(a, b)` | Natural order, dispatched on the runtime type. Passing a third argument is a compile error rather than a silently ignored one, so the two cannot be confused at a call site |
+| `Comparator.of` | does not exist | lifts a plain `(a, b) => number` | Java does not need one: there a lambda already *is* a `Comparator` and the compiler supplies the default methods |
 
-Additions with no Java counterpart: `JavaMap.find` / `JavaList.find` (returning `Optional`), the whole `Contracts`
+Additions with no Java counterpart: `Java.Map.find` / `Java.List.find` (returning `Optional`), the whole `Contracts`
 module, `NotImplementedException`, and the `JsonReader` and `XmlReader` layers — Java's own binding lives in
 Jackson and JAXB rather than in the standard library, and the readers here follow their decisions where one has
 been made.
