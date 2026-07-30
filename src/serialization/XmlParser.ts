@@ -128,10 +128,7 @@ export class XmlElement extends JavaObject {
    * all gone by the time an element exists. An empty element is written in the self-closing form.
    */
   public toXml(): string {
-    let attributes = "";
-    for (const [name, value] of this.#attributes) {
-      attributes += ` ${name}="${escapeAttribute(value)}"`;
-    }
+    const attributes = this.#attributesXml();
     if (this.#text === "" && this.#children.size() === 0) {
       return `<${this.#name}${attributes}/>`;
     }
@@ -140,6 +137,39 @@ export class XmlElement extends JavaObject {
       body += child.toXml();
     }
     return `<${this.#name}${attributes}>${body}</${this.#name}>`;
+  }
+
+  /**
+   * Writes the element back out with one child element per line, for output a person is going to read.
+   *
+   * The only whitespace added is between child elements, which is the only whitespace a parser is entitled to
+   * throw away — see the rules on {@link XmlElement}. So an element holding text stays on its own line, and so
+   * does one holding both text and children, because breaking either apart would change the value that reads
+   * back. Whatever this produces, {@link parseXml} returns an equal element for.
+   *
+   * @param indent the string to repeat per level of nesting
+   */
+  public toIndentedXml(indent: string = "  "): string {
+    return this.#indent(indent, "");
+  }
+
+  #indent(indent: string, prefix: string): string {
+    if (this.#children.size() === 0 || this.#text !== "") {
+      return prefix + this.toXml();
+    }
+    let body = "";
+    for (const child of this.#children) {
+      body += `${child.#indent(indent, prefix + indent)}\n`;
+    }
+    return `${prefix}<${this.#name}${this.#attributesXml()}>\n${body}${prefix}</${this.#name}>`;
+  }
+
+  #attributesXml(): string {
+    let attributes = "";
+    for (const [name, value] of this.#attributes) {
+      attributes += ` ${name}="${escapeAttribute(value)}"`;
+    }
+    return attributes;
   }
 
   /** The element as XML — see {@link toXml}. Diagnostic output should say what was parsed, not where it lives. */
@@ -180,6 +210,25 @@ const NAME_START = /[\p{L}_:]/u;
 const NAME_CHAR = /[\p{L}\p{N}\p{M}._:·-]/u;
 
 const WHITESPACE = /[ \t\r\n]/;
+
+/**
+ * Whether a string is an XML `Name`, and so usable as a tag or an attribute name.
+ *
+ * The writers check the names in a contract with this, because a name is the one part of an element that no
+ * amount of escaping can rescue: text and attribute values can carry anything, but `<order id>` is not a
+ * document at all, and a writer that emitted one would produce output nothing could read back.
+ */
+export function isXmlName(text: string): boolean {
+  if (text === "" || !NAME_START.test(text.charAt(0))) {
+    return false;
+  }
+  for (let index = 1; index < text.length; index++) {
+    if (!NAME_CHAR.test(text.charAt(index))) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function escapeText(text: string): string {
   return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");

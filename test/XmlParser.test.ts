@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { XmlParseException } from "../src/exceptions/XmlParseException.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
-import { XmlElement, parseXml } from "../src/serialization/XmlParser.js";
+import { XmlElement, isXmlName, parseXml } from "../src/serialization/XmlParser.js";
 
 /** The failure a malformed document produces, so a test can say where it landed rather than only that it did. */
 function parseFailure(text: string): XmlParseException {
@@ -188,6 +188,32 @@ describe("XmlElement rendering and equality", () => {
     assert.equal(parseXml(written).getAttribute("t").get(), "one\ntwo");
   });
 
+  it("indents child elements, one to a line", () => {
+    const root = parseXml("<order id='A-1'><items><item sku='hat'/></items><paid>true</paid></order>");
+    assert.equal(
+      root.toIndentedXml(),
+      [
+        `<order id="A-1">`,
+        "  <items>",
+        `    <item sku="hat"/>`,
+        "  </items>",
+        "  <paid>true</paid>",
+        "</order>",
+      ].join("\n"),
+    );
+    assert.equal(parseXml("<a><b/></a>").toIndentedXml("\t"), "<a>\n\t<b/>\n</a>");
+  });
+
+  it("leaves an element carrying text alone, since whitespace there is its value", () => {
+    assert.equal(parseXml("<name> Ada </name>").toIndentedXml(), "<name> Ada </name>");
+    assert.equal(parseXml("<p>hi<b>x</b></p>").toIndentedXml(), "<p>hi<b>x</b></p>");
+  });
+
+  it("indents to a document that reads back the same", () => {
+    const root = parseXml("<a x='1'><b><c>t</c></b><d/></a>");
+    assert.ok(parseXml(root.toIndentedXml()).equals(root));
+  });
+
   it("is equal on name, attributes, children and text", () => {
     const one = parseXml("<a x='1'><b>t</b></a>");
     const same = parseXml("<a x='1'>\n  <b>t</b>\n</a>");
@@ -200,6 +226,22 @@ describe("XmlElement rendering and equality", () => {
 
   it("counts the order of children", () => {
     assert.ok(!parseXml("<a><b/><c/></a>").equals(parseXml("<a><c/><b/></a>")));
+  });
+});
+
+describe("isXmlName", () => {
+  it("accepts the names a document can carry, prefixes included", () => {
+    assert.ok(isXmlName("order"));
+    assert.ok(isXmlName("soap:Envelope"));
+    assert.ok(isXmlName("_private"));
+    assert.ok(isXmlName("order-2.a"));
+  });
+
+  it("refuses what a parser would not read back as a name", () => {
+    assert.ok(!isXmlName(""));
+    assert.ok(!isXmlName("1st"));
+    assert.ok(!isXmlName("order id"));
+    assert.ok(!isXmlName("order<"));
   });
 });
 

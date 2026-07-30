@@ -84,7 +84,7 @@ export {
   unknownValue,
   withDefault,
 } from "./serialization/JsonReader.js";
-export { XmlElement, parseXml } from "./serialization/XmlParser.js";
+export { XmlElement, isXmlName, parseXml } from "./serialization/XmlParser.js";
 export type { XmlField, XmlFields, XmlReader, XmlTextReader } from "./serialization/XmlReader.js";
 export {
   attribute,
@@ -108,3 +108,24 @@ export {
   textElement,
   wrappedChildren,
 } from "./serialization/XmlReader.js";
+export type { XmlFormat, XmlParts, XmlPart, XmlTextWriter, XmlWriter } from "./serialization/XmlWriter.js";
+export {
+  booleanAsText,
+  elementFrom,
+  integerAsText,
+  intoAttribute,
+  intoChild,
+  intoChildText,
+  intoChildren,
+  intoOptionalAttribute,
+  intoOptionalChild,
+  intoText,
+  intoWrappedChildren,
+  mappingAsText,
+  mappingElementFrom,
+  numberAsText,
+  stringAsText,
+  textElementFrom,
+  writeXml,
+  XmlDraft,
+} from "./serialization/XmlWriter.js";

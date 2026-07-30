@@ -54,8 +54,8 @@ both false for structurally equal objects; `JavaList.contains` and `JavaList.ind
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (669 tests); the serialization layer covers both directions of a JSON wire
-contract and reads XML, parser and all. See [Roadmap](#roadmap) for what is deliberately still missing.
+hierarchy are complete and tested (698 tests); the serialization layer covers both directions of a JSON wire
+contract and both of an XML one, parser and all. See [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
 
@@ -86,8 +86,9 @@ npm install github:Brendan-Black/typescript_java
 | `exceptions` | `TSJavaException` and 13 subclasses |
 | `serialization/Serializable` | `Serializable` (type only) |
 | `serialization/JsonReader` | `JsonReader`, `JsonFields`, `readJson`, `objectOf`, `listOf`, `setOf`, `mapOf`, `objectAsMap`, `treeSetOf`, `treeMapOf`, `entryOf`, `arrayOf`, `stringValue`, `numberValue`, `integerValue`, `booleanValue`, `unknownValue`, `enumOf`, `nullable`, `optionalValue`, `withDefault`, `mapping` |
-| `serialization/XmlParser` | `parseXml`, `XmlElement` |
+| `serialization/XmlParser` | `parseXml`, `XmlElement`, `isXmlName` |
 | `serialization/XmlReader` | `XmlReader`, `XmlTextReader`, `XmlField`, `XmlFields`, `readXml`, `elementOf`, `elementNamed`, `textElement`, `mappingElement`, `attribute`, `optionalAttribute`, `textContent`, `child`, `optionalChild`, `childText`, `children`, `wrappedChildren`, `stringText`, `rawText`, `numberText`, `integerText`, `booleanText`, `enumText`, `mappingText` |
+| `serialization/XmlWriter` | `XmlWriter`, `XmlTextWriter`, `XmlPart`, `XmlParts`, `XmlDraft`, `XmlFormat`, `writeXml`, `elementFrom`, `textElementFrom`, `mappingElementFrom`, `intoAttribute`, `intoOptionalAttribute`, `intoText`, `intoChild`, `intoOptionalChild`, `intoChildText`, `intoChildren`, `intoWrappedChildren`, `stringAsText`, `numberAsText`, `integerAsText`, `booleanAsText`, `mappingAsText` |
 
 Everything is re-exported from the package root.
 
@@ -460,6 +461,42 @@ typo, which is the wrong end of the trade for a wire contract. Namespaces are le
 stays prefixed, `xmlns` declarations are ordinary attributes, and `getLocalName()` is there for matching without
 one. DTDs are skipped rather than honoured, so an undeclared entity is a failure instead of a silent hole.
 
+Writing is the same three layers in reverse, and the contract reads line for line like the one above. An
+`XmlTextWriter` turns a value into character data, an `XmlPart` says *where in the element it goes*, and an
+`XmlWriter` assembles a `T` into a whole element:
+
+```ts
+const item = elementFrom<Item>({
+  sku: intoAttribute("sku"),
+  quantity: intoChildText("quantity", integerAsText),
+});
+
+const order = elementFrom<Order>({
+  id: intoAttribute("id"),
+  total: intoChildText("total", numberAsText),
+  note: intoOptionalChild("note", textElementFrom()),
+  items: intoWrappedChildren("items", "item", item),
+});
+
+writeXml("order", value, order, { declaration: true, indent: "  " });
+```
+
+Where a reader takes the path it is reading at, a writer takes the name it is writing under: an element's name
+belongs to whatever holds it, which is why the same `item` writer serves under any tag a caller nests it beneath,
+and why the root name is an argument to `writeXml`. For the tree rather than the text of it — to nest it in a
+document being assembled by hand — call `order.write(value, "order")` and keep the `XmlElement`.
+
+Whatever `writeXml` produces, `parseXml` reads back as an equal element and a matching reader as an equal value.
+That guarantee is why a few things are refused rather than written: `NaN` and the infinities, an integer larger
+than JavaScript was holding exactly, and a tag or attribute name that is not an XML name — no amount of escaping
+rescues `<order id>`, and a document nothing can read back is worse than a failure at the slot. Those failures
+carry the same XPath the reading ones do, and two parts aimed at one attribute is an `IllegalStateException`
+rather than one of the two values quietly vanishing.
+
+Indentation is opt-in and only ever goes between child elements, the one place a parser is entitled to throw
+whitespace away. An element holding text stays on its own line, and so does one holding text and children
+together, because breaking either apart would change what reads back out.
+
 ## Where this deliberately departs from Java
 
 | | Java | Here | Why |
@@ -488,9 +525,9 @@ one. DTDs are skipped rather than honoured, so an undeclared entity is a failure
 | `new TreeMap<Point, V>()` | compiles, throws at the first comparison | same | TypeScript cannot constrain a class's type parameter per constructor. Pass `naturalOrder<K>()` — which *is* constrained — to move the check to compile time |
 
 Additions with no Java counterpart: `JavaMap.find` / `JavaList.find` (returning `Optional`), the whole `Contracts`
-module, `NotImplementedException`, and the `JsonReader` and `XmlReader` layers — Java's own binding lives in
-Jackson and JAXB rather than in the standard library, and the readers here follow their decisions where one has
-been made.
+module, `NotImplementedException`, and the `JsonReader`, `XmlReader` and `XmlWriter` layers — Java's own binding
+lives in Jackson and JAXB rather than in the standard library, and the layers here follow their decisions where
+one has been made.
 
 ## Roadmap
 
@@ -498,9 +535,9 @@ been made.
   `Serializable` out, `JsonReader` in — but nothing here knows about a particular backend's conventions:
   Spring's error envelope, Jackson's polymorphic `@JsonTypeInfo` discriminators, or the date and `BigDecimal`
   encodings a Java service picks by configuration rather than by type.
-- **Writing XML from a contract.** `XmlElement.toXml` renders a tree that was built or parsed, which is enough to
-  round-trip a document, but there is no declarative write direction to match `XmlReader` — nothing that takes a
-  DTO and a shape and produces the element for it, the way `Serializable` answers `JsonReader`.
+- **XML Schema and namespace resolution.** The XML layers bind a document to a DTO in both directions, but
+  neither knows anything about a schema: nothing validates a document against an `.xsd`, and nothing resolves a
+  prefix to the URI it was declared against — a contract matches `soap:Body` by the name as written.
 
 ## Development
 
