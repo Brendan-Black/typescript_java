@@ -54,8 +54,8 @@ both false for structurally equal objects; `JavaList.contains` and `JavaList.ind
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (569 tests); the serialization layer is one interface and little more. See
-[Roadmap](#roadmap) for what is deliberately still missing.
+hierarchy are complete and tested (600 tests); the serialization layer covers both directions of a JSON wire
+contract. See [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
 
@@ -83,8 +83,9 @@ npm install github:Brendan-Black/typescript_java
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
 | `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaIterator`, `JavaListIterator`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
 | `collections/Collections` | `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap`, `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
-| `exceptions` | `TSJavaException` and 10 subclasses |
-| `serialization` | `Serializable` (type only) |
+| `exceptions` | `TSJavaException` and 11 subclasses |
+| `serialization/Serializable` | `Serializable` (type only) |
+| `serialization/JsonReader` | `JsonReader`, `JsonFields`, `readJson`, `objectOf`, `listOf`, `setOf`, `mapOf`, `objectAsMap`, `treeSetOf`, `treeMapOf`, `entryOf`, `arrayOf`, `stringValue`, `numberValue`, `integerValue`, `booleanValue`, `unknownValue`, `enumOf`, `nullable`, `optionalValue`, `withDefault`, `mapping` |
 
 Everything is re-exported from the package root.
 
@@ -322,8 +323,11 @@ Everything descends from `TSJavaException` (standing in for `Throwable`) via `Ru
 (e instanceof RuntimeException) ... }` catches anything this library raises and nothing else.
 
 `ClassCastException` · `ConcurrentModificationException` · `IllegalArgumentException` · `IllegalStateException` ·
-`IndexOutOfBoundsException` · `NoSuchElementException` · `NotImplementedException` · `NullPointerException` ·
-`UnsupportedOperationException`
+`IndexOutOfBoundsException` · `JsonBindException` · `NoSuchElementException` · `NotImplementedException` ·
+`NullPointerException` · `UnsupportedOperationException`
+
+`JsonBindException` is an `IllegalArgumentException` underneath — a payload of the wrong shape is an argument the
+reader cannot accept — so either type catches it. It carries the path of the slot that failed.
 
 ### Serialization
 
@@ -354,8 +358,46 @@ one value an `Optional` cannot hold — `of` rejects it and `ofNullable` folds i
 rather than dropping it, which is the difference between "there is no nickname" and "nicknames were never
 mentioned".
 
-There is no interface for the reverse direction. Parsing back is `JSON.parse` plus a constructor call, which is
-all the collections need — the pair form and the array form both feed straight into one.
+#### Reading it back
+
+`JSON.parse` returns `unknown`, and the usual next step is a cast — which types a value without checking it, so a
+field the server renamed becomes `undefined` and travels a long way before anything visibly breaks. A
+`JsonReader<T>` is the parse direction stated as a contract: it checks as it reads and produces a real `T`, or
+throws `JsonBindException` naming the slot that was wrong.
+
+```ts
+interface Order { id: number; status: "PENDING" | "SHIPPED"; lines: JavaList<string>; note: Optional<string>; }
+
+const order = objectOf<Order>({
+  id: integerValue,
+  status: enumOf("PENDING", "SHIPPED"),
+  lines: listOf(stringValue),
+  note: optionalValue(stringValue),
+});
+
+readJson(body, listOf(order)); // JavaList<Order>, or a JsonBindException saying where it went wrong
+```
+
+```
+$.orders[2].total: expected a number, got a string
+```
+
+The path is on the exception as data too — `error.getPath()` — not only in the message.
+
+Fields are **required by default**: a missing key reaches its reader as nothing and is refused there, so
+optionality is something a contract states rather than something it falls into. `optionalValue` reads Jackson's
+`Optional` shape (the value, or `null`, or a key that never arrived), `nullable` admits an explicit `null` only,
+and `withDefault` substitutes. Keys the contract does not mention are ignored, which is Jackson's default and the
+only choice that survives a server adding a field.
+
+There is a reader for every shape this library writes — `listOf`, `setOf`, `mapOf`, `treeSetOf`, `treeMapOf`,
+`entryOf`, `arrayOf`, `objectOf` — so anything it can serialise it can read back, and the tests pin that round
+trip. `objectAsMap` covers the other map shape a Java backend sends: a JSON object, which is what Jackson emits
+for a `Map<String, V>`. `mapping` is the hinge onto your own types:
+
+```ts
+const point = mapping(objectOf({ x: numberValue, y: numberValue }), ({ x, y }) => new Point(x, y));
+```
 
 ## Where this deliberately departs from Java
 
@@ -384,14 +426,17 @@ all the collections need — the pair form and the array form both feed straight
 | `new TreeMap<Point, V>()` | compiles, throws at the first comparison | same | TypeScript cannot constrain a class's type parameter per constructor. Pass `naturalOrder<K>()` — which *is* constrained — to move the check to compile time |
 
 Additions with no Java counterpart: `JavaMap.find` / `JavaList.find` (returning `Optional`), the whole `Contracts`
-module, and `NotImplementedException`.
+module, `NotImplementedException`, and the `JsonReader` layer — Java's own binding lives in Jackson rather than in
+the standard library, and the readers here follow Jackson's decisions where it has made one.
 
 ## Roadmap
 
-- **DTO wire contracts** to and from backend frameworks (Spring/Jackson/raw Tomcat). Today's serialization layer is
-  one interface and `toJSON` on the collections and `Optional`; there is no framework-specific support, and
-  nothing types the parse direction — a contract for that belongs with the layer that needs it.
-- **XML parsing** (JavaBeans). Not started.
+- **Framework-specific wire support** (Spring/Jackson/raw Tomcat). The JSON contract is symmetric now —
+  `Serializable` out, `JsonReader` in — but nothing here knows about a particular backend's conventions:
+  Spring's error envelope, Jackson's polymorphic `@JsonTypeInfo` discriminators, or the date and `BigDecimal`
+  encodings a Java service picks by configuration rather than by type.
+- **XML parsing** (JavaBeans). Not started. Node has no `DOMParser` and this package has no runtime dependencies,
+  so it needs a tokenizer written here; the binding half can reuse the reader combinators above.
 
 ## Development
 

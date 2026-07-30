@@ -52,9 +52,33 @@ export { ConcurrentModificationException } from "./exceptions/ConcurrentModifica
 export { IllegalArgumentException } from "./exceptions/IllegalArgumentException.js";
 export { IllegalStateException } from "./exceptions/IllegalStateException.js";
 export { IndexOutOfBoundsException } from "./exceptions/IndexOutOfBoundsException.js";
+export { JsonBindException } from "./exceptions/JsonBindException.js";
 export { NoSuchElementException } from "./exceptions/NoSuchElementException.js";
 export { NotImplementedException } from "./exceptions/NotImplementedException.js";
 export { NullPointerException } from "./exceptions/NullPointerException.js";
 export { UnsupportedOperationException } from "./exceptions/UnsupportedOperationException.js";
 
 export type { Serializable } from "./serialization/Serializable.js";
+export type { JsonFields, JsonReader } from "./serialization/JsonReader.js";
+export {
+  arrayOf,
+  booleanValue,
+  entryOf,
+  enumOf,
+  integerValue,
+  listOf,
+  mapOf,
+  mapping,
+  nullable,
+  numberValue,
+  objectAsMap,
+  objectOf,
+  optionalValue,
+  readJson,
+  setOf,
+  stringValue,
+  treeMapOf,
+  treeSetOf,
+  unknownValue,
+  withDefault,
+} from "./serialization/JsonReader.js";
