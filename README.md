@@ -54,7 +54,7 @@ both false for structurally equal objects; `JavaList.contains` and `JavaList.ind
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (515 tests); the serialization layer is one interface and little more. See
+hierarchy are complete and tested (547 tests); the serialization layer is one interface and little more. See
 [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -81,7 +81,7 @@ npm install github:Brendan-Black/typescript_java
 | `fundamentals/Comparable` | `Comparable`, `NaturallyOrdered`, `compareOf` |
 | `fundamentals/Comparator` | `Comparator`, `comparator`, `comparing`, `naturalOrder`, `reverseOrder`, `nullsFirst`, `nullsLast` |
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
-| `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaIterator`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
+| `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaIterator`, `JavaListIterator`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
 | `collections/Collections` | `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap`, `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
 | `exceptions` | `TSJavaException` and 10 subclasses |
 | `serialization` | `Serializable` (type only) |
@@ -168,6 +168,25 @@ straight to anything taking a sequence and picks up from where the cursor alread
 ```ts
 const rest = new JavaList<string>(it); // whatever next() has not yet reached
 ```
+
+`JavaList.listIterator()` is Java's `ListIterator`: the same cursor, plus `hasPrevious`, `previous`, `nextIndex`,
+`previousIndex`, `set` and `add`. The cursor sits *between* elements, which is why `next()` followed by
+`previous()` hands back the same element twice, and why starting at `size()` walks the list backwards:
+
+```ts
+const it = list.listIterator(list.size());
+while (it.hasPrevious()) {
+  const value = it.previous();
+  if (value.stale) {
+    it.set(refresh(value)); // in place — no structural change, so nothing else iterating is disturbed
+  }
+}
+```
+
+`add` inserts at the cursor and steps over it, so a following `next()` is unaffected and a following `previous()`
+returns what was just inserted. It is the one way to grow a list while walking it. Both `set` and `remove` need a
+`next()` or `previous()` to have returned something they can act on, and an `add` or `remove` clears that — so
+`IllegalStateException` is what you get for asking out of turn.
 
 `Collections` carries Java's algorithms as well as its factories — `sort`, `max`, `min`, `binarySearch`,
 `reverse` and `swap`. Each comes in two forms, as Java's do: one taking a comparator, and one taking none and
@@ -354,10 +373,8 @@ module, and `NotImplementedException`.
   nothing types the parse direction — a contract for that belongs with the layer that needs it.
 - **XML parsing** (JavaBeans). Not started.
 - **Live range views** from `TreeMap.headMap` / `subMap` and `TreeSet.headSet` / `subSet`, which today are copies.
-  `JavaIterator` is the piece that was missing; what remains is bounds-checking writes made through a range and
-  keeping a range and its parent's modification counts in step.
-- Remaining `java.util` shapes: `ListIterator`, which adds `previous`, `set` and `add` to the cursor
-  `JavaCollection.iterator()` already hands back.
+  What remains is bounds-checking writes made through a range and keeping a range and its parent's modification
+  counts in step.
 
 ## Development
 

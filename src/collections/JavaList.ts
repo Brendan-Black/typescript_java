@@ -5,7 +5,7 @@ import { elementAt } from "../fundamentals/Indexing.js";
 import { JavaObject } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
 import { JavaCollection, unsupported } from "./JavaCollection.js";
-import { iteratorOver, type JavaIterator } from "./JavaIterator.js";
+import { type JavaIterator, type JavaListIterator, listIteratorOver } from "./JavaIterator.js";
 
 /**
  * The mutable innards, held behind one reference so an unmodifiable view can share them and stay live.
@@ -256,21 +256,45 @@ export class JavaList<T> extends JavaCollection<T> {
   /**
    * Java's `ArrayList.iterator()`, removal included.
    *
-   * Removal is by position, not by value, so a list holding two `equals` elements loses the one the cursor is
-   * standing on. That is the difference between this and {@link removeIf}, which can only ask the list to remove
-   * a value and gets the first match.
+   * The forward half of {@link listIterator}, as it is in Java — a list has one cursor, and reading it one way is
+   * the same machinery as reading it both. Removal is by position, so a list holding two `equals` elements loses
+   * the one the cursor is standing on, where {@link removeIf} can only ask for a value and gets the first match.
    */
   public override iterator(): JavaIterator<T> {
-    return iteratorOver<T>({
-      elements: [...this.#state.items],
-      modCount: () => this.#state.modCount,
-      removeAt: (_value, position) => {
-        this.removeAt(position);
+    return this.listIterator();
+  }
+
+  /**
+   * Java's `List.listIterator()`: a cursor that also runs backwards and can write. See {@link JavaListIterator}.
+   *
+   * @param index where to start, between elements — `0` at the front, {@link size} at the back, ready to walk
+   * the list in reverse. Defaults to the front.
+   * @throws {@link IndexOutOfBoundsException} unless `0 <= index <= size`
+   */
+  public listIterator(index: number = 0): JavaListIterator<T> {
+    if (!Number.isInteger(index) || index < 0 || index > this.#state.items.length) {
+      throw new IndexOutOfBoundsException(`Index ${index} out of bounds for length ${this.#state.items.length}`);
+    }
+    return listIteratorOver<T>(
+      {
+        size: () => this.#state.items.length,
+        get: (at) => elementAt(this.#state.items, at, "JavaList.listIterator"),
+        replace: (at, value) => {
+          this.set(at, value);
+        },
+        insert: (at, value) => {
+          this.addAt(at, value);
+        },
+        removeAt: (at) => {
+          this.removeAt(at);
+        },
+        modCount: () => this.#state.modCount,
+        beforeMutate: (operation) => {
+          this.#requireMutable(operation);
+        },
       },
-      beforeRemove: () => {
-        this.#requireMutable("remove");
-      },
-    });
+      index,
+    );
   }
 
   /**

@@ -21,7 +21,7 @@ export type { Comparator } from "./fundamentals/Comparator.js";
 
 export { JavaAbstractMap, JavaMapEntry } from "./collections/JavaAbstractMap.js";
 export { JavaAbstractSet, JavaCollection } from "./collections/JavaCollection.js";
-export type { JavaIterator } from "./collections/JavaIterator.js";
+export type { JavaIterator, JavaListIterator } from "./collections/JavaIterator.js";
 export { JavaList } from "./collections/JavaList.js";
 export { JavaMap } from "./collections/JavaMap.js";
 export { JavaSet } from "./collections/JavaSet.js";
