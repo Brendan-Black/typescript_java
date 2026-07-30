@@ -3,6 +3,7 @@ import { boilerplateEqualityCheck, JavaObject } from "../fundamentals/Object.js"
 import { Optional } from "../fundamentals/Optional.js";
 import type { Serializable } from "../serialization/Serializable.js";
 import { JavaAbstractSet, JavaCollection, unsupported } from "./JavaCollection.js";
+import { iteratorOver, type JavaIterator, mapIterator } from "./JavaIterator.js";
 
 /**
  * One key/value pair, as handed out by {@link JavaAbstractMap.entrySet}. Java's `Map.Entry`, minus `setValue` —
@@ -93,6 +94,12 @@ export abstract class JavaAbstractMap<K, V> extends JavaObject implements Iterab
 
   /** Throws {@link UnsupportedOperationException} if this map is a read-only view. */
   protected abstract requireMutable(operation: string): void;
+
+  /**
+   * The count of structural changes this map has seen, which is what the iterators watch to fail fast. Replacing
+   * the value under an existing key does not count; adding or removing a key does.
+   */
+  protected abstract modCount(): number;
 
   public isEmpty(): boolean {
     return this.size() === 0;
@@ -310,6 +317,31 @@ export abstract class JavaAbstractMap<K, V> extends JavaObject implements Iterab
   }
 
   /**
+   * The cursor behind `entrySet().iterator()`, and behind the key and value views' iterators too — a map has one
+   * notion of position, and all three views share it.
+   *
+   * Java reaches this only through a view, and there is nothing wrong with going the same way. It is public here
+   * because {@link JavaSet} and {@link TreeSet} are backed by a map they do not otherwise expose, and this is
+   * where their own iterators come from.
+   *
+   * NOTE: removal takes the entry the cursor is on, without checking that the value still matches — unlike
+   * `entrySet().remove(entry)`, which does check. Java draws the same line, and for the same reason: an iterator
+   * knows which entry it means, where a caller holding an entry only has a description of one.
+   */
+  public entryIterator(): JavaIterator<JavaMapEntry<K, V>> {
+    return iteratorOver<JavaMapEntry<K, V>>({
+      elements: [...this.entries()],
+      modCount: () => this.modCount(),
+      removeAt: (entry) => {
+        this.removeKey(entry.getKey());
+      },
+      beforeRemove: () => {
+        this.requireMutable("remove");
+      },
+    });
+  }
+
+  /**
    * Java's `keySet()`: a live, write-through view of the keys.
    *
    * Removing from it removes from the map, and the map's own changes show through it. Adding is refused with
@@ -459,6 +491,10 @@ class KeySetView<K, V> extends JavaAbstractSet<K> {
   public [Symbol.iterator](): IterableIterator<K> {
     return this.#map.keys();
   }
+
+  public iterator(): JavaIterator<K> {
+    return mapIterator(this.#map.entryIterator(), (entry) => entry.getKey());
+  }
 }
 
 /** Live view of a map's values. A collection rather than a set, because values may repeat. */
@@ -499,6 +535,15 @@ class ValuesView<K, V> extends JavaCollection<V> {
 
   public [Symbol.iterator](): IterableIterator<V> {
     return this.#map.valueIterator();
+  }
+
+  /**
+   * Removal here drops the entry the cursor is on, where {@link remove} can only drop the first entry holding an
+   * equal value. For a values view, where repeats are the whole reason it is a collection rather than a set,
+   * that difference is the point of having an iterator at all.
+   */
+  public iterator(): JavaIterator<V> {
+    return mapIterator(this.#map.entryIterator(), (entry) => entry.getValue());
   }
 }
 
@@ -541,5 +586,9 @@ class EntrySetView<K, V> extends JavaAbstractSet<JavaMapEntry<K, V>> {
 
   public [Symbol.iterator](): IterableIterator<JavaMapEntry<K, V>> {
     return this.#map.entries();
+  }
+
+  public iterator(): JavaIterator<JavaMapEntry<K, V>> {
+    return this.#map.entryIterator();
   }
 }

@@ -1,4 +1,5 @@
 import { JavaAbstractSet, unsupported } from "./JavaCollection.js";
+import { type JavaIterator, mapIterator } from "./JavaIterator.js";
 import { JavaMap } from "./JavaMap.js";
 
 /**
@@ -107,5 +108,20 @@ export class JavaSet<T> extends JavaAbstractSet<T> {
 
   public [Symbol.iterator](): IterableIterator<T> {
     return this.#map.keys();
+  }
+
+  /**
+   * The backing map's cursor, read as keys. The read-only check has to be made here rather than left to the map:
+   * {@link of} marks this set unmodifiable without touching the map underneath it, which is free to be shared
+   * with something mutable.
+   */
+  public iterator(): JavaIterator<T> {
+    return mapIterator(
+      this.#map.entryIterator(),
+      (entry) => entry.getKey(),
+      () => {
+        this.#requireMutable("remove");
+      },
+    );
   }
 }

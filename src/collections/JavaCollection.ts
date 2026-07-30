@@ -2,6 +2,7 @@ import { UnsupportedOperationException } from "../exceptions/UnsupportedOperatio
 import { equalsOf, hashCodeOf } from "../fundamentals/Hashing.js";
 import { JavaObject } from "../fundamentals/Object.js";
 import type { Serializable } from "../serialization/Serializable.js";
+import type { JavaIterator } from "./JavaIterator.js";
 
 /**
  * Java's `AbstractCollection`: everything a collection can do once it can report its size, answer `contains`,
@@ -27,6 +28,16 @@ export abstract class JavaCollection<T> extends JavaObject implements Iterable<T
   public abstract clear(): void;
 
   public abstract [Symbol.iterator](): IterableIterator<T>;
+
+  /**
+   * Java's `Iterable.iterator()`: a cursor the caller drives, and the only way to remove an element while
+   * walking. See {@link JavaIterator}.
+   *
+   * Abstract rather than derived because a correct {@link JavaIterator.remove} needs the subclass's own storage —
+   * its structural-modification count, and a removal that takes out the element the cursor is on rather than the
+   * first one equal to it.
+   */
+  public abstract iterator(): JavaIterator<T>;
 
   public isEmpty(): boolean {
     return this.size() === 0;
@@ -68,14 +79,14 @@ export abstract class JavaCollection<T> extends JavaObject implements Iterable<T
   /**
    * Java's `Collection.removeIf`: drops every element the predicate accepts.
    *
-   * This is how you remove while walking a collection. Iteration here is fail-fast, so removing inside a
-   * `for...of` throws {@link ConcurrentModificationException}, and there is no `Iterator.remove()` to reach for
-   * because iteration is generator-based. `removeIf` sidesteps both by choosing from a snapshot and removing
-   * afterwards — which is what Java itself has recommended writing since 8.
+   * The short way to remove while walking a collection, and the one Java has recommended writing since 8.
+   * Iteration is fail-fast, so removing inside a `for...of` throws {@link ConcurrentModificationException};
+   * `removeIf` sidesteps that by choosing from a snapshot and removing afterwards.
    *
    * NOTE: the doomed elements are removed by value, so a predicate that accepts one of two `equals` elements but
-   * not the other is not honoured element-by-element. Java's iterator-based version is exact there. Keep the
-   * predicate a function of the value, as `equals` already assumes, and the two agree.
+   * not the other is not honoured element-by-element. Keep the predicate a function of the value, as `equals`
+   * already assumes, and the question does not arise. When it has to — when the same value in two positions
+   * deserves two answers — walk {@link iterator} and call {@link JavaIterator.remove}, which is exact.
    *
    * @returns whether the collection changed
    */

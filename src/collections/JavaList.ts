@@ -5,6 +5,7 @@ import { elementAt } from "../fundamentals/Indexing.js";
 import { JavaObject } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
 import { JavaCollection, unsupported } from "./JavaCollection.js";
+import { iteratorOver, type JavaIterator } from "./JavaIterator.js";
 
 /**
  * The mutable innards, held behind one reference so an unmodifiable view can share them and stay live.
@@ -250,6 +251,26 @@ export class JavaList<T> extends JavaCollection<T> {
       }
       yield elementAt(this.#state.items, i, "JavaList iterator");
     }
+  }
+
+  /**
+   * Java's `ArrayList.iterator()`, removal included.
+   *
+   * Removal is by position, not by value, so a list holding two `equals` elements loses the one the cursor is
+   * standing on. That is the difference between this and {@link removeIf}, which can only ask the list to remove
+   * a value and gets the first match.
+   */
+  public override iterator(): JavaIterator<T> {
+    return iteratorOver<T>({
+      elements: [...this.#state.items],
+      modCount: () => this.#state.modCount,
+      removeAt: (_value, position) => {
+        this.removeAt(position);
+      },
+      beforeRemove: () => {
+        this.#requireMutable("remove");
+      },
+    });
   }
 
   /**

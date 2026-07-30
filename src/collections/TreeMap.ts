@@ -124,6 +124,10 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
     }
   }
 
+  protected override modCount(): number {
+    return this.#state.modCount;
+  }
+
   #compare(a: K, b: K): number {
     return this.#comparator === null ? compareOf(a, b) : this.#comparator(a, b);
   }

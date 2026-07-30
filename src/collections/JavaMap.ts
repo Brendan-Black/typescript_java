@@ -114,6 +114,10 @@ export class JavaMap<K, V> extends JavaAbstractMap<K, V> {
     }
   }
 
+  protected override modCount(): number {
+    return this.#state.modCount;
+  }
+
   #findNode(key: K): Node<K, V> | null {
     const bucket = this.#state.buckets.get(hashCodeOf(key));
     if (bucket === undefined) {

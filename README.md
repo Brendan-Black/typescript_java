@@ -54,7 +54,7 @@ both false for structurally equal objects; `JavaList.contains` and `JavaList.ind
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (482 tests); the serialization layer is one interface and little more. See
+hierarchy are complete and tested (515 tests); the serialization layer is one interface and little more. See
 [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -81,7 +81,7 @@ npm install github:Brendan-Black/typescript_java
 | `fundamentals/Comparable` | `Comparable`, `NaturallyOrdered`, `compareOf` |
 | `fundamentals/Comparator` | `Comparator`, `comparator`, `comparing`, `naturalOrder`, `reverseOrder`, `nullsFirst`, `nullsLast` |
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
-| `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
+| `collections` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaIterator`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
 | `collections/Collections` | `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap`, `emptyList`, `emptyMap`, `emptySet`, `singleton`, `singletonList`, `singletonMap`, `unmodifiableList`, `unmodifiableMap`, `unmodifiableSet` |
 | `exceptions` | `TSJavaException` and 10 subclasses |
 | `serialization` | `Serializable` (type only) |
@@ -138,11 +138,35 @@ view.toString(); // "[1, 2, 3]" — changes to the original show through
 view.add(4);     // UnsupportedOperationException
 ```
 
-`removeIf` is how you remove while walking a collection. Since iteration is generator-based there is no
-`Iterator.remove()` to reach for, and the fail-fast check above rules out doing it inside the loop:
+`removeIf` is the short way to remove while walking a collection, since the fail-fast check above rules out doing
+it inside the loop:
 
 ```ts
 users.removeIf((u) => u.expired); // rather than a ConcurrentModificationException
+```
+
+`iterator()` is the exact way. It hands back a `JavaIterator` — Java's `Iterator`, a cursor you drive yourself —
+whose `remove()` takes out the element you are standing on rather than the first one equal to it:
+
+```ts
+const it = list.iterator();
+while (it.hasNext()) {
+  if (it.next().expired) {
+    it.remove(); // this element, even if an equal one sits earlier in the list
+  }
+}
+```
+
+`remove()` throws `IllegalStateException` if it does not follow a `next()`, or if it is called twice for the same
+one. Removing through the iterator does not trip the fail-fast check; anything else changing the collection
+mid-walk still does. The map views hand out iterators too, and removing through any of the three removes the
+whole entry — including `values()`, where `remove(value)` can only find the first entry holding it.
+
+A `JavaIterator` is also `Iterable`, which Java's `Iterator` is not, so a half-consumed one can be passed
+straight to anything taking a sequence and picks up from where the cursor already is:
+
+```ts
+const rest = new JavaList<string>(it); // whatever next() has not yet reached
 ```
 
 `Collections` carries Java's algorithms as well as its factories — `sort`, `max`, `min`, `binarySearch`,
@@ -310,7 +334,9 @@ all the collections need — the pair form and the array form both feed straight
 | `Optional` | not `Serializable` | serialises as the value, or `null` | Java's is a return type, not a field; here it is exactly what a DTO wants to hold, and the wire form matches what Jackson emits for one |
 | `Comparator.thenComparing` | overloaded on `Comparator` and on a key extractor | `then` / `thenComparing` | A comparator is *structurally* a key extractor returning a number, so the overload would resolve silently and wrongly. Java needs a cast to break the same tie |
 | `List.sort` | any comparator, every element | same | `Array.prototype.sort` hoists `undefined` entries to the end without ever consulting the comparator; `JavaList.sort` sorts positions so that nothing is hidden from it |
-| `Collection.removeIf` | removes through the iterator, element by element | chooses from a snapshot, removes by value | There is no `Iterator.remove()` to build on here. The two differ only for a predicate that accepts one of two `equals` elements and not the other |
+| `Collection.removeIf` | removes through the iterator, element by element | chooses from a snapshot, removes by value | The two differ only for a predicate that accepts one of two `equals` elements and not the other; `iterator()` is exact where that matters |
+| `Iterator` | not `Iterable` | `Iterable` too | Everything here that takes a sequence takes an `Iterable`, and wrapping a half-consumed cursor to hand it on would be a step for nothing |
+| `Iterator.remove` on an unmodifiable collection | order of the two checks varies by implementation | refuses before complaining about call order | "This cannot be removed from" is the more useful of the two answers, and it is what `Collections.unmodifiableCollection`'s iterator gives |
 | `Collections.max` / `min` | takes a `Collection` | takes any `Iterable` | An array or a plain `Set` is as good an input, and nothing in the algorithm needs more |
 | `TreeMap` storage | red-black tree | one sorted array | Lookups are O(log n) either way; insertion and removal are O(n) here. In exchange every navigation and range question is index arithmetic, which is why they are all present and all obviously correct |
 | `TreeMap.headMap` / `subMap`, `TreeSet.headSet` / `subSet` | live views | copies | Same reason as `List.subList`, plus a live range view has to reject keys outside its own bounds |
@@ -327,9 +353,11 @@ module, and `NotImplementedException`.
   one interface and `toJSON` on the collections and `Optional`; there is no framework-specific support, and
   nothing types the parse direction — a contract for that belongs with the layer that needs it.
 - **XML parsing** (JavaBeans). Not started.
-- Remaining `java.util` shapes: `Iterator` as an interface rather than a generator — which is what would make
-  `Iterator.remove()` expressible, though `removeIf` now covers what that idiom is usually reaching for, and
-  what would let the sorted collections hand back live range views instead of copies.
+- **Live range views** from `TreeMap.headMap` / `subMap` and `TreeSet.headSet` / `subSet`, which today are copies.
+  `JavaIterator` is the piece that was missing; what remains is bounds-checking writes made through a range and
+  keeping a range and its parent's modification counts in step.
+- Remaining `java.util` shapes: `ListIterator`, which adds `previous`, `set` and `add` to the cursor
+  `JavaCollection.iterator()` already hands back.
 
 ## Development
 

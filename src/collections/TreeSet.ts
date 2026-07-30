@@ -1,6 +1,7 @@
 import { NoSuchElementException } from "../exceptions/NoSuchElementException.js";
 import type { NaturallyOrdered } from "../fundamentals/Comparable.js";
 import { JavaAbstractSet, unsupported } from "./JavaCollection.js";
+import { type JavaIterator, mapIterator } from "./JavaIterator.js";
 import { TreeMap } from "./TreeMap.js";
 
 /**
@@ -262,5 +263,20 @@ export class TreeSet<T> extends JavaAbstractSet<T> {
 
   public [Symbol.iterator](): IterableIterator<T> {
     return this.#map.keys();
+  }
+
+  /**
+   * The backing map's cursor, read as keys, so the walk is in order and removal takes the member it is standing
+   * on. The read-only check belongs here for the same reason it does in {@link JavaSet.iterator}: {@link of}
+   * marks the set unmodifiable, not the map.
+   */
+  public iterator(): JavaIterator<T> {
+    return mapIterator(
+      this.#map.entryIterator(),
+      (entry) => entry.getKey(),
+      () => {
+        this.#requireMutable("remove");
+      },
+    );
   }
 }
