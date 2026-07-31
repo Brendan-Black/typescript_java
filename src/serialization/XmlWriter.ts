@@ -2,6 +2,7 @@ import { IllegalArgumentException } from "../exceptions/IllegalArgumentException
 import { IllegalStateException } from "../exceptions/IllegalStateException.js";
 import { XmlBindException } from "../exceptions/XmlBindException.js";
 import { Optional } from "../fundamentals/Optional.js";
+import { describe, withoutCycles } from "./Binding.js";
 import { isXmlName, XmlElement } from "./XmlParser.js";
 
 /**
@@ -144,6 +145,23 @@ function requireName(name: string, what: string): string {
   return name;
 }
 
+/** The failure a value that contains itself produces, at the element where the loop closes. */
+function cycle(path: string): never {
+  throw new XmlBindException(path, "a value contains itself, and an XML document is a tree");
+}
+
+/**
+ * The text writers check the type they were promised before writing it, as the JSON scalars do and for the same
+ * reason: a `T` reaching this layer can lie, and this is the last thing that runs before the value leaves the
+ * process. Unchecked, `stringAsText` handed a number failed inside the escaper with a bare `TypeError`, and
+ * `booleanAsText` handed one wrote `true` — which is the worse of the two, because the document is well formed.
+ */
+function requireType(value: unknown, expected: "string" | "number" | "boolean", path: string): void {
+  if (typeof value !== expected) {
+    throw new XmlBindException(path, `expected a ${expected}, got ${describe(value)}`);
+  }
+}
+
 /**
  * A string as it stands, character for character.
  *
@@ -155,7 +173,8 @@ function requireName(name: string, what: string): string {
  * A union of string literals needs nothing more than this — `Priority` is a `string`, and so writes as one.
  */
 export const stringAsText: XmlTextWriter<string> = {
-  write(value: string): string {
+  write(value: string, path: string): string {
+    requireType(value, "string", path);
     return value;
   },
 };
@@ -169,6 +188,7 @@ export const stringAsText: XmlTextWriter<string> = {
  */
 export const numberAsText: XmlTextWriter<number> = {
   write(value: number, path: string): string {
+    requireType(value, "number", path);
     if (!Number.isFinite(value)) {
       throw new XmlBindException(path, `${String(value)} cannot be written as a number`);
     }
@@ -179,6 +199,7 @@ export const numberAsText: XmlTextWriter<number> = {
 /** Java's `int` and `long`: digits and an optional sign. Refuses anything JavaScript was not holding exactly. */
 export const integerAsText: XmlTextWriter<number> = {
   write(value: number, path: string): string {
+    requireType(value, "number", path);
     if (!Number.isSafeInteger(value)) {
       throw new XmlBindException(path, `${String(value)} is not an integer that can be written exactly`);
     }
@@ -188,7 +209,8 @@ export const integerAsText: XmlTextWriter<number> = {
 
 /** `true` or `false` — the two spellings of `xs:boolean` that a person reading the document will expect. */
 export const booleanAsText: XmlTextWriter<boolean> = {
-  write(value: boolean): string {
+  write(value: boolean, path: string): string {
+    requireType(value, "boolean", path);
     return value ? "true" : "false";
   },
 };
@@ -246,18 +268,20 @@ export function elementFrom<T extends object>(parts: XmlParts<T>): XmlWriter<T> 
   const writers: readonly (readonly [string, XmlPart<unknown>])[] = Object.entries(widened);
   return {
     write(value: T, name: string, path: string = rootPath(name)): XmlElement {
-      const source = value as unknown as Readonly<Record<string, unknown>>;
-      const draft = new XmlDraft();
-      for (const [property, part] of writers) {
-        const held = source[property];
-        if (held === undefined) {
-          // Named in the message rather than appended to the path: a property is a name in the type, and the
-          // step it becomes in the document — `@id`, `/total` — is the part's decision rather than this one's.
-          throw new XmlBindException(path, `expected a value for ${property}, got nothing`);
+      return withoutCycles(value, () => cycle(path), () => {
+        const source = value as unknown as Readonly<Record<string, unknown>>;
+        const draft = new XmlDraft();
+        for (const [property, part] of writers) {
+          const held = source[property];
+          if (held === undefined) {
+            // Named in the message rather than appended to the path: a property is a name in the type, and the
+            // step it becomes in the document — `@id`, `/total` — is the part's decision rather than this one's.
+            throw new XmlBindException(path, `expected a value for ${property}, got nothing`);
+          }
+          part.write(held, draft, path);
         }
-        part.write(held, draft, path);
-      }
-      return draft.build(name);
+        return draft.build(name);
+      });
     },
   };
 }

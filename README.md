@@ -99,7 +99,7 @@ standard library and nothing else.
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (746 tests); the serialization layer covers both directions of a JSON wire
+hierarchy are complete and tested (754 tests); the serialization layer covers both directions of a JSON wire
 contract and both of an XML one, parser and all. See [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -503,6 +503,21 @@ in what they build out of one — writing has `arrayFrom` alone, because a `Java
 `"PENDING" | "SHIPPED"` *is* a `string` and writes as one, which is the same call `stringAsText` makes on the
 XML side.
 
+The writers check the type they were promised rather than trusting it, which looks redundant until you ask where
+a wrong one comes from. It is the same premise that justifies refusing an absent property: a `T` reaching this
+layer can lie — cast from `JSON.parse`, handed over by an untyped library, built against an older version of the
+type — and this is the last thing that runs before the value leaves the process. Unchecked, `stringAsJson` would
+have written the number and produced a document its own reader rejects, at the far end and against the wrong
+party. A value that contains itself is refused for a related reason: a document is a tree, and where
+`JSON.stringify` says only `Converting circular structure to JSON`, this says which slot closed the loop.
+
+```
+$.sku: expected a string, got number 42
+$.children[0]: a value contains itself, and a JSON document is a tree
+```
+
+The same value appearing twice in different branches is a tree, not a loop, and writes fine.
+
 Two asymmetries are deliberate. A property that is absent at runtime is refused rather than written, mirroring a
 missing key being refused on the way in — that is the case where a `T` can lie, and `JSON.stringify` would drop
 the key and leave the reader at the far end to complain about it. And `integerAsJson` refuses an integer larger
@@ -635,7 +650,10 @@ carry the same XPath the reading ones do, and two parts aimed at one attribute i
 rather than one of the two values quietly vanishing. A property missing from the value at runtime — a `T` cast
 from a parsed document, or built against a version of the type without the field — is refused before it reaches
 its part, the same way `objectFrom` refuses one on the JSON side. Absence that is meant is said with
-`intoOptionalAttribute`, `intoOptionalChild`, or an empty collection.
+`intoOptionalAttribute`, `intoOptionalChild`, or an empty collection. The text writers likewise check the type
+they were promised, rather than letting `booleanAsText` answer `true` to any truthy value — a document that is
+well formed and says the opposite of what was meant is worse than one that was never sent. A value containing
+itself is refused at the element where the loop closes.
 
 Indentation is opt-in and only ever goes between child elements, the one place a parser is entitled to throw
 whitespace away. An element holding text stays on its own line, and so does one holding text and children

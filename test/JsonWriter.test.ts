@@ -34,6 +34,7 @@ import {
   booleanAsJson,
   entryFrom,
   integerAsJson,
+  type JsonValue,
   type JsonWriter,
   mapAsObject,
   mapFrom,
@@ -82,6 +83,22 @@ const orderReader: JsonReader<Order> = objectOf<Order>({
   paid: booleanValue,
 });
 
+/** A shape that can nest inside itself, which is the only way to reach the cycle guard. */
+interface Tree {
+  name: string;
+  children: List<Tree>;
+}
+
+const tree: JsonWriter<Tree> = objectFrom<Tree>({
+  name: stringAsJson,
+  // the self-reference has to be deferred, since `tree` is what is being declared
+  children: arrayFrom<Tree>({ write: (value: Tree, path?: string): JsonValue => tree.write(value, path) }),
+});
+
+function aTree(): Tree {
+  return { name: "root", children: new List<Tree>() };
+}
+
 /** Fresh every time, so a test that breaks one field does not leak into the next. */
 function anOrder(): Order {
   return {
@@ -125,6 +142,20 @@ describe("JsonWriter scalars", () => {
   it("passes a value that is already JSON through unread", () => {
     const payload = { anything: true };
     assert.equal(rawJson.write(payload), payload);
+  });
+
+  it("refuses a value that lied about its type, rather than sending one the reader rejects", () => {
+    // same premise objectFrom refuses an absent property on: a T cast from JSON.parse can be wrong either way
+    assert.throws(() => stringAsJson.write(42 as unknown as string), /\$: expected a string, got number 42/);
+    assert.throws(() => numberAsJson.write("1" as unknown as number), /\$: expected a number, got a string/);
+    assert.throws(() => integerAsJson.write(null as unknown as number), /\$: expected a number, got null/);
+    assert.throws(() => booleanAsJson.write("yes" as unknown as boolean), /\$: expected a boolean, got a string/);
+    assert.throws(() => stringAsJson.write(42 as unknown as string), JsonBindException);
+  });
+
+  it("names the slot the lie sat in, not just the value", () => {
+    const lying = { sku: 42, quantity: 2 } as unknown as Item;
+    assert.throws(() => item.write(lying), /\$\.sku: expected a string, got number 42/);
   });
 });
 
@@ -286,6 +317,31 @@ describe("JsonWriter failure paths", () => {
 
   it("is an IllegalArgumentException, so either type catches it", () => {
     assert.throws(() => numberAsJson.write(Number.NaN), IllegalArgumentException);
+  });
+
+  it("names the slot where a value closes a loop, where recursing would exhaust the stack", () => {
+    const cyclic = aTree();
+    cyclic.children.add(cyclic);
+    assert.throws(() => writeJson(cyclic, tree), /\$\.children\[0\]: a value contains itself/);
+    assert.throws(() => writeJson(cyclic, tree), JsonBindException);
+    // JSON.stringify catches this too, but says only that it happened
+    assert.throws(() => JSON.stringify(cyclic), TypeError);
+  });
+
+  it("lets the same value appear twice in different branches, which is a tree and not a loop", () => {
+    const shared: Item = { sku: "hat", quantity: 1 };
+    assert.equal(
+      writeJson([shared, shared], arrayFrom(item)),
+      '[{"sku":"hat","quantity":1},{"sku":"hat","quantity":1}]',
+    );
+  });
+
+  it("forgets a value once it is written, so a refused document does not poison the next one", () => {
+    const cyclic = aTree();
+    cyclic.children.add(cyclic);
+    assert.throws(() => writeJson(cyclic, tree), JsonBindException);
+    cyclic.children.clear();
+    assert.equal(writeJson(cyclic, tree), '{"name":"root","children":[]}');
   });
 });
 

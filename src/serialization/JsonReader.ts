@@ -6,6 +6,7 @@ import { TreeMap } from "../collections/TreeMap.js";
 import { TreeSet } from "../collections/TreeSet.js";
 import { JsonBindException } from "../exceptions/JsonBindException.js";
 import { Optional } from "../fundamentals/Optional.js";
+import { describe } from "./Binding.js";
 import type { Serializable } from "./Serializable.js";
 
 /**
@@ -49,29 +50,6 @@ export type JsonFields<T> = {
 
 /** The path notation the readers build up. `$` is the document itself, so every message has a root to hang off. */
 const ROOT = "$";
-
-/**
- * What to call a value in a message. The type name rather than the value, except for the handful of cases where
- * the value is short and saying it is more use than naming its type.
- */
-function describe(value: unknown): string {
-  if (value === null) {
-    return "null";
-  }
-  if (value === undefined) {
-    return "nothing";
-  }
-  if (Array.isArray(value)) {
-    return "an array";
-  }
-  if (typeof value === "object") {
-    return "an object";
-  }
-  if (typeof value === "string") {
-    return "a string";
-  }
-  return `${typeof value} ${String(value)}`;
-}
 
 function fail(path: string, expected: string, value: unknown): never {
   throw new JsonBindException(path, `expected ${expected}, got ${describe(value)}`);

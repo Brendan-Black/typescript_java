@@ -1,6 +1,7 @@
 import type { MapEntry } from "../collections/AbstractMap.js";
 import { JsonBindException } from "../exceptions/JsonBindException.js";
 import type { Optional } from "../fundamentals/Optional.js";
+import { describe, withoutCycles } from "./Binding.js";
 import type { JsonReader } from "./JsonReader.js";
 import type { Serializable } from "./Serializable.js";
 
@@ -97,15 +98,37 @@ export type JsonProperties<T> = {
 /** The same path notation the readers build up, so a failure reads the same whichever direction it came from. */
 const ROOT = "$";
 
+/** The failure a value that contains itself produces, at the slot where the loop closes. */
+function cycle(path: string): never {
+  throw new JsonBindException(path, "a value contains itself, and a JSON document is a tree");
+}
+
+/**
+ * The scalars check the type they were promised before writing it, the same way the readers check the one a
+ * document turned out to hold.
+ *
+ * The type system has already said this is a `string`, so at first glance the check is redundant — but a `T`
+ * arriving here can lie, which is the premise {@link objectFrom} already refuses an absent property on. The
+ * same cast from `JSON.parse` that loses a field puts a number where a string was promised, and this layer is
+ * the last thing that runs before the value leaves the process. Left unchecked, `stringAsJson` would write the
+ * number, producing a document its own reader rejects at the far end and against the wrong party.
+ */
+function requireType(value: unknown, expected: "string" | "number" | "boolean", path: string): void {
+  if (typeof value !== expected) {
+    throw new JsonBindException(path, `expected a ${expected}, got ${describe(value)}`);
+  }
+}
+
 /**
  * A string as it stands.
  *
  * A union of string literals needs nothing more than this — a `"PENDING" | "SHIPPED"` *is* a `string`, and so
- * writes as one. That is why there is no counterpart to `enumOf`: the reader has to check because it is handed
- * `unknown`, and here the type has already done it.
+ * writes as one. That is why there is no counterpart to `enumOf`: the reader has to check the set of values
+ * because it is handed `unknown`, and here the type has already narrowed it to one of them.
  */
 export const stringAsJson: JsonWriter<string> = {
-  write(value: string): JsonValue {
+  write(value: string, path: string = ROOT): JsonValue {
+    requireType(value, "string", path);
     return value;
   },
 };
@@ -120,6 +143,7 @@ export const stringAsJson: JsonWriter<string> = {
  */
 export const numberAsJson: JsonWriter<number> = {
   write(value: number, path: string = ROOT): JsonValue {
+    requireType(value, "number", path);
     if (!Number.isFinite(value)) {
       throw new JsonBindException(path, `${String(value)} cannot be written as a number`);
     }
@@ -137,6 +161,7 @@ export const numberAsJson: JsonWriter<number> = {
  */
 export const integerAsJson: JsonWriter<number> = {
   write(value: number, path: string = ROOT): JsonValue {
+    requireType(value, "number", path);
     if (!Number.isSafeInteger(value)) {
       throw new JsonBindException(path, `${String(value)} is not an integer that can be written exactly`);
     }
@@ -145,7 +170,8 @@ export const integerAsJson: JsonWriter<number> = {
 };
 
 export const booleanAsJson: JsonWriter<boolean> = {
-  write(value: boolean): JsonValue {
+  write(value: boolean, path: string = ROOT): JsonValue {
+    requireType(value, "boolean", path);
     return value;
   },
 };
@@ -264,13 +290,15 @@ export function omitWhenEmpty<T>(writer: JsonWriter<T>): OmittedWhenEmpty<Option
 export function arrayFrom<T>(element: JsonWriter<T>): JsonWriter<Iterable<T>> {
   return {
     write(values: Iterable<T>, path: string = ROOT): JsonValue {
-      const items: JsonValue[] = [];
-      let index = 0;
-      for (const value of values) {
-        items.push(element.write(value, `${path}[${index}]`));
-        index++;
-      }
-      return items;
+      return withoutCycles(values, () => cycle(path), () => {
+        const items: JsonValue[] = [];
+        let index = 0;
+        for (const value of values) {
+          items.push(element.write(value, `${path}[${index}]`));
+          index++;
+        }
+        return items;
+      });
     },
   };
 }
@@ -300,14 +328,16 @@ export function entryFrom<K, V>(key: JsonWriter<K>, value: JsonWriter<V>): JsonW
 export function mapFrom<K, V>(key: JsonWriter<K>, value: JsonWriter<V>): JsonWriter<Iterable<readonly [K, V]>> {
   return {
     write(entries: Iterable<readonly [K, V]>, path: string = ROOT): JsonValue {
-      const pairs: JsonValue[] = [];
-      let index = 0;
-      for (const [held, mapped] of entries) {
-        const at = `${path}[${index}]`;
-        pairs.push([key.write(held, `${at}[0]`), value.write(mapped, `${at}[1]`)]);
-        index++;
-      }
-      return pairs;
+      return withoutCycles(entries, () => cycle(path), () => {
+        const pairs: JsonValue[] = [];
+        let index = 0;
+        for (const [held, mapped] of entries) {
+          const at = `${path}[${index}]`;
+          pairs.push([key.write(held, `${at}[0]`), value.write(mapped, `${at}[1]`)]);
+          index++;
+        }
+        return pairs;
+      });
     },
   };
 }
@@ -325,13 +355,15 @@ export function mapFrom<K, V>(key: JsonWriter<K>, value: JsonWriter<V>): JsonWri
 export function mapAsObject<V>(value: JsonWriter<V>): JsonWriter<Iterable<readonly [string, V]>> {
   return {
     write(entries: Iterable<readonly [string, V]>, path: string = ROOT): JsonValue {
-      const written: [string, JsonValue][] = [];
-      for (const [key, held] of entries) {
-        written.push([key, value.write(held, `${path}.${key}`)]);
-      }
-      // `fromEntries` rather than assigning into a literal: these keys are data, and `result["__proto__"] = x`
-      // sets the prototype instead of adding a property. Assembling from pairs defines every one of them.
-      return Object.fromEntries(written);
+      return withoutCycles(entries, () => cycle(path), () => {
+        const written: [string, JsonValue][] = [];
+        for (const [key, held] of entries) {
+          written.push([key, value.write(held, `${path}.${key}`)]);
+        }
+        // `fromEntries` rather than assigning into a literal: these keys are data, and `result["__proto__"] = x`
+        // sets the prototype instead of adding a property. Assembling from pairs defines every one of them.
+        return Object.fromEntries(written);
+      });
     },
   };
 }
@@ -367,27 +399,29 @@ export function objectFrom<T extends object>(properties: JsonProperties<T>): Jso
   const writers: readonly (readonly [string, Property])[] = Object.entries(widened);
   return {
     write(value: T, path: string = ROOT): JsonValue {
-      const source = value as unknown as Readonly<Record<string, unknown>>;
-      const written: [string, JsonValue][] = [];
-      for (const [property, writer] of writers) {
-        const at = `${path}.${property}`;
-        const held = source[property];
-        if (held === undefined) {
-          throw new JsonBindException(at, "expected a value, got nothing");
-        }
-        // The two kinds of property tell themselves apart by the method they carry. An omittable one is the
-        // only thing that may answer with nothing, and nothing here means the key is left off rather than
-        // written as `undefined` — which is not a JsonValue and could not be written anyway.
-        if ("writeOrOmit" in writer) {
-          const maybe = writer.writeOrOmit(held, at);
-          if (maybe !== undefined) {
-            written.push([property, maybe]);
+      return withoutCycles(value, () => cycle(path), () => {
+        const source = value as unknown as Readonly<Record<string, unknown>>;
+        const written: [string, JsonValue][] = [];
+        for (const [property, writer] of writers) {
+          const at = `${path}.${property}`;
+          const held = source[property];
+          if (held === undefined) {
+            throw new JsonBindException(at, "expected a value, got nothing");
           }
-        } else {
-          written.push([property, writer.write(held, at)]);
+          // The two kinds of property tell themselves apart by the method they carry. An omittable one is the
+          // only thing that may answer with nothing, and nothing here means the key is left off rather than
+          // written as `undefined` — which is not a JsonValue and could not be written anyway.
+          if ("writeOrOmit" in writer) {
+            const maybe = writer.writeOrOmit(held, at);
+            if (maybe !== undefined) {
+              written.push([property, maybe]);
+            }
+          } else {
+            written.push([property, writer.write(held, at)]);
+          }
         }
-      }
-      return Object.fromEntries(written);
+        return Object.fromEntries(written);
+      });
     },
   };
 }

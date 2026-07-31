@@ -103,6 +103,24 @@ const orderReader: XmlReader<Order> = elementOf<Order>({
   paid: childText("paid", booleanText),
 });
 
+/** A shape that can nest inside itself, which is the only way to reach the cycle guard. */
+interface Node {
+  name: string;
+  children: List<Node>;
+}
+
+const node: XmlWriter<Node> = elementFrom<Node>({
+  name: intoAttribute("name"),
+  // the self-reference has to be deferred, since `node` is what is being declared
+  children: intoChildren<Node>("child", {
+    write: (value: Node, name: string, path?: string) => node.write(value, name, path),
+  }),
+});
+
+function aNode(): Node {
+  return { name: "root", children: new List<Node>() };
+}
+
 function anOrder(): Order {
   return {
     id: "A-1",
@@ -275,6 +293,31 @@ describe("XmlWriter failures", () => {
     for (const writer of [asAttribute, asText, asChildren]) {
       assert.throws(() => writeXml("holder", absent, writer), XmlBindException);
     }
+  });
+
+  it("refuses a value that lied about its type, instead of writing something well-formed and wrong", () => {
+    // booleanAsText answered "true" to anything truthy, which is a document that parses and says the opposite
+    assert.throws(() => booleanAsText.write(42 as unknown as boolean, "/x"), /\/x: expected a boolean, got number 42/);
+    assert.throws(() => numberAsText.write("1" as unknown as number, "/x"), /\/x: expected a number, got a string/);
+    assert.throws(() => integerAsText.write(null as unknown as number, "/x"), /\/x: expected a number, got null/);
+    // and a string reaching the escaper as a number threw a bare TypeError from inside it
+    assert.throws(() => stringAsText.write(42 as unknown as string, "/x"), XmlBindException);
+  });
+
+  it("names the element where a value closes a loop, where recursing would exhaust the stack", () => {
+    const cyclic = aNode();
+    cyclic.children.add(cyclic);
+    const failure = bindFailure(cyclic, node, "node");
+    assert.equal(failure.getPath(), "/node/child[1]");
+    assert.match(failure.message, /a value contains itself/);
+  });
+
+  it("forgets a value once it is written, so a refused document does not poison the next one", () => {
+    const cyclic = aNode();
+    cyclic.children.add(cyclic);
+    assert.throws(() => writeXml("node", cyclic, node), XmlBindException);
+    cyclic.children.clear();
+    assert.equal(writeXml("node", cyclic, node), `<node name="root"/>`);
   });
 
   it("lets a draft be filled by hand, for a part of one's own", () => {
