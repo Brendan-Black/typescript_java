@@ -153,9 +153,9 @@ Everything is re-exported from the package root.
 ### Hashing that matches the JVM
 
 `String.hashCode`, `Double.hashCode` and `Boolean.hashCode` are reproduced exactly, not approximated, so a hash
-computed here equals one computed on the JVM for the same value. `hashCodeOf` extends that to the types Java has no
-equivalent for — plain objects, arrays, functions and unregistered symbols get a stable identity hash from a
-`WeakMap`, which is what Java's unoverridden `Object.hashCode` gives you.
+computed here equals one computed on the JVM for the same value. `Java.Objects.hashCode` extends that to the types
+Java has no equivalent for — plain objects, arrays, functions and unregistered symbols get a stable identity hash
+from a `WeakMap`, which is what Java's unoverridden `Object.hashCode` gives you.
 
 ### Optional
 
@@ -169,8 +169,8 @@ const found = [maybeA, maybeB, maybeC].flatMap((o) => [...o]);
 ```
 
 `Java.Map.find(key)` is the unambiguous `get`: Java's `get` returns `null` both for an absent key and for a key
-mapped to `null`, and `find` returns an `Optional` instead. (A key mapped to `null` still yields an empty Optional
-— only `containsKey` separates those two cases.)
+mapped to `null`, and `find` returns a `Java.Optional` instead. (A key mapped to `null` still yields an empty
+`Java.Optional` — only `containsKey` separates those two cases.)
 
 ### Collections
 
@@ -207,7 +207,7 @@ it inside the loop:
 users.removeIf((u) => u.expired); // rather than a ConcurrentModificationException
 ```
 
-`iterator()` is the exact way. It hands back a `JavaIterator` — Java's `Iterator`, a cursor you drive yourself —
+`iterator()` is the exact way. It hands back a `Java.Iterator` — Java's `Iterator`, a cursor you drive yourself —
 whose `remove()` takes out the element you are standing on rather than the first one equal to it:
 
 ```ts
@@ -224,7 +224,7 @@ one. Removing through the iterator does not trip the fail-fast check; anything e
 mid-walk still does. The map views hand out iterators too, and removing through any of the three removes the
 whole entry — including `values()`, where `remove(value)` can only find the first entry holding it.
 
-A `JavaIterator` is also `Iterable`, which Java's `Iterator` is not, so a half-consumed one can be passed
+A `Java.Iterator` is also `Iterable`, which Java's `Iterator` is not, so a half-consumed one can be passed
 straight to anything taking a sequence and picks up from where the cursor already is:
 
 ```ts
@@ -318,12 +318,12 @@ Both share their derived operations with `Java.Map` and `Java.Set` — `Java.Tre
 
 One thing to keep in mind, and it is Java's rule too: a sorted collection decides what counts as the same key by
 **comparing**, not by `equals`. Two keys that compare equal are one entry, whatever `equals` says — which is the
-consistency-with-equals contract on `Comparable` asking to be honoured.
+consistency-with-equals contract on `Java.Comparable` asking to be honoured.
 
 ### Ordering
 
-`Comparable` for a type that carries its own order, `Comparator` for one imposed from outside, and Java's
-combinators over them:
+`Java.Comparable` for a type that carries its own order, `Java.Comparator` for one imposed from outside, and
+Java's combinators over them:
 
 ```ts
 import { Java } from "typescript-java";
@@ -337,15 +337,15 @@ names.sort(naturalOrder<string>());
 rows.sort(comparing<Row, number | null>((r) => r.score, nullsLast(naturalOrder<number>())));
 ```
 
-A `Comparator` here *is* a comparison function, so it goes straight into `Java.List.sort` or
+A `Java.Comparator` here *is* a comparison function, so it goes straight into `Java.List.sort` or
 `Array.prototype.sort`; it just carries `reversed()`, `then()` and `thenComparing()` as well.
 `Java.Comparator.of(fn)` lifts a plain arrow function into one, which is the step Java's compiler does for you
 when it turns a lambda into a functional interface — and the one member of `Java.Comparator` that Java itself
 has no need for.
 
 `naturalOrder<T>()` will not compile unless `T` actually has an order — a primitive Java orders, a `Date`, or
-something implementing `Comparable`. That is the same guarantee Java gets from `<T extends Comparable<? super
-T>>`, and it turns a `ClassCastException` at sort time into a red squiggle.
+something implementing `Java.Comparable`. That is the same guarantee Java gets from
+`<T extends Comparable<? super T>>`, and it turns a `ClassCastException` at sort time into a red squiggle.
 
 Underneath is `Java.Objects.compare(a, b)`, which sits alongside `Java.Objects.hashCode` and
 `Java.Objects.equals` and reproduces Java's comparison semantics rather than JavaScript's:
@@ -383,17 +383,19 @@ colliding hashes for distinct values. Both are off with `setHashContractChecks(f
 
 ### Exceptions
 
-Everything descends from `TSJavaException` (standing in for `Throwable`) via `RuntimeException`, so `catch (e) { if
-(e instanceof RuntimeException) ... }` catches anything this library raises and nothing else.
+Everything descends from `Java.Throwable` (which roots this library's hierarchy rather than everything throwable)
+via `Java.RuntimeException`, so `catch (e) { if (e instanceof Java.RuntimeException) ... }` catches anything this
+library raises and nothing else.
 
-`ClassCastException` · `ConcurrentModificationException` · `IllegalArgumentException` · `IllegalStateException` ·
-`IndexOutOfBoundsException` · `JsonBindException` · `NoSuchElementException` · `NotImplementedException` ·
-`NullPointerException` · `UnsupportedOperationException` · `XmlBindException` · `XmlParseException`
+`Java.ClassCastException` · `Java.ConcurrentModificationException` · `Java.IllegalArgumentException` ·
+`Java.IllegalStateException` · `Java.IndexOutOfBoundsException` · `Java.NoSuchElementException` ·
+`Java.NotImplementedException` · `Java.NullPointerException` · `Java.UnsupportedOperationException`
 
-The three serialization failures are `IllegalArgumentException`s underneath — a payload of the wrong shape is an
-argument the reader cannot accept — so either type catches them. `JsonBindException` and `XmlBindException` carry
-the path of the slot that failed; `XmlParseException` carries the line and column, because a document that is not
-XML at all has no slots yet.
+The three serialization failures stay outside the namespace, alongside the layers that raise them —
+`JsonBindException` · `XmlBindException` · `XmlParseException`. They are `Java.IllegalArgumentException`s
+underneath — a payload of the wrong shape is an argument the reader cannot accept — so either type catches them.
+`JsonBindException` and `XmlBindException` carry the path of the slot that failed; `XmlParseException` carries the
+line and column, because a document that is not XML at all has no slots yet.
 
 ### Serialization
 
@@ -409,20 +411,21 @@ A map serialises as pairs rather than as an object deliberately: JSON object key
 keyed on numbers, nulls or `Java.Object`s would either collide or lose information. The pair form round-trips
 straight back through the constructor.
 
-An `Optional` serialises as the value it holds, or as `null` when empty — the wrapper leaves no trace on the wire:
+A `Java.Optional` serialises as the value it holds, or as `null` when empty — the wrapper leaves no trace on the
+wire:
 
 ```ts
 JSON.stringify({ nickname: Java.Optional.of("addie") }); // {"nickname":"addie"}
 JSON.stringify({ nickname: Java.Optional.empty() });     // {"nickname":null}
 ```
 
-This is the shape Jackson's `Jdk8Module` produces for a Java DTO, and it is the only shape that makes `Optional`
-usable on a wire contract: whether a field is wrapped is a property of the server's code, not of the JSON, and a
-consumer in another language should not have to know. `null` is unambiguous in both directions, because it is the
-one value an `Optional` cannot hold — `of` rejects it and `ofNullable` folds it to `empty` — so
-`Optional.ofNullable(JSON.parse(json))` reconstructs the original exactly. An empty `Optional` keeps its key
-rather than dropping it, which is the difference between "there is no nickname" and "nicknames were never
-mentioned".
+This is the shape Jackson's `Jdk8Module` produces for a Java DTO, and it is the only shape that makes
+`Java.Optional` usable on a wire contract: whether a field is wrapped is a property of the server's code, not of
+the JSON, and a consumer in another language should not have to know. `null` is unambiguous in both directions,
+because it is the one value a `Java.Optional` cannot hold — `of` rejects it and `ofNullable` folds it to `empty`
+— so `Java.Optional.ofNullable(JSON.parse(json))` reconstructs the original exactly. An empty `Java.Optional`
+keeps its key rather than dropping it, which is the difference between "there is no nickname" and "nicknames were
+never mentioned".
 
 #### Reading it back
 
@@ -567,16 +570,16 @@ together, because breaking either apart would change what reads back out.
 | `List.subList` | live view | copy | A live sublist has to track index shifts in its parent, and Java's own docs spend a paragraph on how that goes wrong |
 | `HashMap` iteration order | unspecified | insertion order | An unspecified order that happens to be stable is a trap waiting for the first person to depend on it |
 | `Map.Entry` | has `setValue` | snapshot only | Writing through one would not do what it looks like |
-| `Stream` | full API | `Optional.stream()` returns an iterator | There is no Stream type here; an iterator is the JavaScript equivalent |
+| `Stream` | full API | `Java.Optional.stream()` returns an iterator | There is no Stream type here; an iterator is the JavaScript equivalent |
 | `Set.of` with duplicates | throws | collapses them | The less surprising of the two |
 | `Collections.emptyList()` | shared singleton | fresh instance | |
-| `null` vs `undefined` | no `undefined` | folded together as "absent" | Except in `equalsOf`, where a map keeps them distinct rather than silently rewriting one of your keys |
+| `null` vs `undefined` | no `undefined` | folded together as "absent" | Except in `Java.Objects.equals`, where a map keeps them distinct rather than silently rewriting one of your keys |
 | `Optional` | not `Serializable` | serialises as the value, or `null` | Java's is a return type, not a field; here it is exactly what a DTO wants to hold, and the wire form matches what Jackson emits for one |
 | `Comparator.thenComparing` | overloaded on `Comparator` and on a key extractor | `then` / `thenComparing` | A comparator is *structurally* a key extractor returning a number, so the overload would resolve silently and wrongly. Java needs a cast to break the same tie |
 | `List.sort` | any comparator, every element | same | `Array.prototype.sort` hoists `undefined` entries to the end without ever consulting the comparator; `Java.List.sort` sorts positions so that nothing is hidden from it |
 | `Collection.removeIf` | removes through the iterator, element by element | chooses from a snapshot, removes by value | The two differ only for a predicate that accepts one of two `equals` elements and not the other; `iterator()` is exact where that matters |
 | `Iterator` | not `Iterable` | `Iterable` too | Everything here that takes a sequence takes an `Iterable`, and wrapping a half-consumed cursor to hand it on would be a step for nothing |
-| `Iterator.remove` on an unmodifiable collection | order of the two checks varies by implementation | refuses before complaining about call order | "This cannot be removed from" is the more useful of the two answers, and it is what `Collections.unmodifiableCollection`'s iterator gives |
+| `Iterator.remove` on an unmodifiable collection | order of the two checks varies by implementation | refuses before complaining about call order | "This cannot be removed from" is the more useful of the two answers, and it is what `Java.Collections.unmodifiableCollection`'s iterator gives |
 | `Collections.max` / `min` | takes a `Collection` | takes any `Iterable` | An array or a plain `Set` is as good an input, and nothing in the algorithm needs more |
 | `TreeMap` storage | red-black tree | one sorted array | Lookups are O(log n) either way; insertion and removal are O(n) here. In exchange every navigation and range question is index arithmetic, which is why they are all present and all obviously correct |
 | `TreeMap.descendingMap`, `TreeSet.descendingSet` | live views | copies, ordered by the reversed comparator | A sorted collection in its own right rather than a reversed reading of another one; `descendingKeys()` covers the walk without the copy |
@@ -590,10 +593,10 @@ together, because breaking either apart would change what reads back out.
 | `Objects.compare` | `compare(a, b, comparator)` | `Java.Objects.compare(a, b)` | Natural order, dispatched on the runtime type. Passing a third argument is a compile error rather than a silently ignored one, so the two cannot be confused at a call site |
 | `Comparator.of` | does not exist | lifts a plain `(a, b) => number` | Java does not need one: there a lambda already *is* a `Comparator` and the compiler supplies the default methods |
 
-Additions with no Java counterpart: `Java.Map.find` / `Java.List.find` (returning `Optional`), the whole `Contracts`
-module, `NotImplementedException`, and the `JsonReader`, `XmlReader` and `XmlWriter` layers — Java's own binding
-lives in Jackson and JAXB rather than in the standard library, and the layers here follow their decisions where
-one has been made.
+Additions with no Java counterpart: `Java.Map.find` / `Java.List.find` (returning `Java.Optional`), the whole
+`Contracts` module, `Java.NotImplementedException`, and the `JsonReader`, `XmlReader` and `XmlWriter` layers —
+Java's own binding lives in Jackson and JAXB rather than in the standard library, and the layers here follow their
+decisions where one has been made.
 
 ## Roadmap
 
