@@ -99,7 +99,7 @@ standard library and nothing else.
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (742 tests); the serialization layer covers both directions of a JSON wire
+hierarchy are complete and tested (746 tests); the serialization layer covers both directions of a JSON wire
 contract and both of an XML one, parser and all. See [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -137,7 +137,7 @@ Outside the namespace — no `java.*` counterpart, so these are the package's to
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
 | `exceptions` | `JsonBindException`, `XmlBindException`, `XmlParseException` |
 | `serialization/JsonReader` | `JsonReader`, `JsonFields`, `readJson`, `objectOf`, `listOf`, `setOf`, `mapOf`, `objectAsMap`, `treeSetOf`, `treeMapOf`, `entryOf`, `arrayOf`, `stringValue`, `numberValue`, `integerValue`, `booleanValue`, `unknownValue`, `enumOf`, `nullable`, `optionalValue`, `withDefault`, `mapping` |
-| `serialization/JsonWriter` | `JsonWriter`, `JsonProperties`, `JsonValue`, `writeJson`, `objectFrom`, `arrayFrom`, `mapFrom`, `mapAsObject`, `entryFrom`, `stringAsJson`, `numberAsJson`, `integerAsJson`, `booleanAsJson`, `rawJson`, `nullableAsJson`, `optionalAsJson`, `mappingAsJson` |
+| `serialization/JsonWriter` | `JsonWriter`, `JsonProperties`, `JsonValue`, `writeJson`, `objectFrom`, `arrayFrom`, `mapFrom`, `mapAsObject`, `entryFrom`, `stringAsJson`, `numberAsJson`, `integerAsJson`, `booleanAsJson`, `rawJson`, `nullableAsJson`, `optionalAsJson`, `omitWhenEmpty`, `OmittedWhenEmpty`, `mappingAsJson` |
 | `serialization/XmlParser` | `parseXml`, `XmlElement`, `isXmlName` |
 | `serialization/XmlReader` | `XmlReader`, `XmlTextReader`, `XmlField`, `XmlFields`, `readXml`, `elementOf`, `elementNamed`, `textElement`, `mappingElement`, `attribute`, `optionalAttribute`, `textContent`, `child`, `optionalChild`, `childText`, `children`, `wrappedChildren`, `stringText`, `rawText`, `numberText`, `integerText`, `booleanText`, `enumText`, `mappingText` |
 | `serialization/XmlWriter` | `XmlWriter`, `XmlTextWriter`, `XmlPart`, `XmlParts`, `XmlDraft`, `XmlFormat`, `writeXml`, `elementFrom`, `textElementFrom`, `mappingElementFrom`, `intoAttribute`, `intoOptionalAttribute`, `intoText`, `intoChild`, `intoOptionalChild`, `intoChildText`, `intoChildren`, `intoWrappedChildren`, `stringAsText`, `numberAsText`, `integerAsText`, `booleanAsText`, `mappingAsText` |
@@ -509,6 +509,38 @@ the key and leave the reader at the far end to complain about it. And `integerAs
 than JavaScript was holding exactly, where `integerValue` accepts one: a reader has to take the number the
 document contains, but a writer still has the original, and `9007199254740993` written out arrives as
 `...992` — a number the receiver reads back happily, and not the one that was sent.
+
+`optionalAsJson` writes `null` for an empty `Optional` and keeps the key, because `null` says "there is no
+nickname" and a missing key says "nicknames were never mentioned". `omitWhenEmpty` is the other choice, and the
+only thing here that leaves a key off:
+
+```ts
+objectFrom<User>({
+  handle: optionalAsJson(stringAsJson),  // empty -> "handle": null
+  nickname: omitWhenEmpty(stringAsJson), // empty -> no key at all
+});
+```
+
+It is not a `JsonWriter`, and deliberately so: a writer always produces a value, absence is not one, and there is
+nowhere but a key that a JSON value can simply not be — `arrayFrom(omitWhenEmpty(stringAsJson))` is a compile
+error, because an element that wrote nothing would shift every index after it. Only `objectFrom` takes one.
+
+What makes the distinction more than taste is JSON Merge Patch, where `null` and a missing key are *opposite*
+instructions: a `null` deletes the field, a missing key leaves it as it is. Two absences, so two `Optional`s —
+was the field mentioned, and if so does it have a value:
+
+```ts
+const patch = objectFrom<Patch>({ note: omitWhenEmpty(optionalAsJson(stringAsJson)) });
+
+Optional.of(Optional.of("gift wrap"))   // {"note":"gift wrap"}   set it
+Optional.of(Optional.empty<string>())   // {"note":null}          delete it
+Optional.empty()                        // {}                     leave it alone
+```
+
+`Optional<string | null>` is not an alternative: `Optional.of(null)` throws and `Optional.ofNullable(null)` is
+empty, so a present null is a value this `Optional` will not hold, exactly as Java's will not. The reader needs
+no counterpart to any of this — `optionalValue` already folds a missing key back to an empty `Optional`, so
+whichever spelling a contract writes, it reads back the same.
 
 For the tree rather than the text of it — to nest a contract's output inside a document being assembled by hand
 — call `order.write(value)` and keep the `JsonValue`.

@@ -50,7 +50,8 @@ export type JsonValue =
  *
  * Every writer here produces the shape the matching reader reads and the matching `toJSON` writes, so the three
  * agree: what this sends, `readJson` reads back as an equal value, and a document assembled by
- * `JSON.stringify` is one a contract could have written.
+ * `JSON.stringify` is one a contract could have written. That includes the shapes where a key is simply not
+ * there, which {@link omitWhenEmpty} writes and `optionalValue` has always read.
  */
 export interface JsonWriter<T> {
   /**
@@ -62,9 +63,35 @@ export interface JsonWriter<T> {
   write(value: T, path?: string): JsonValue;
 }
 
-/** A writer per property of `T`, which is what {@link objectFrom} needs to build one. */
+/**
+ * A property that may write no key at all, rather than a value for one — what {@link omitWhenEmpty} builds, and
+ * the only thing in this module that can leave a key off.
+ *
+ * Deliberately not a {@link JsonWriter}. A writer always produces a value, and absence is not one: there is no
+ * `JsonValue` meaning "nothing", which is why omission needs a second kind of property rather than a fourteenth
+ * writer. Keeping the two apart is also what makes `arrayFrom(omitWhenEmpty(stringAsJson))` a compile error —
+ * an array element that writes nothing would shift every index after it, and there is nowhere else in a
+ * document that a value can simply not be.
+ */
+export interface OmittedWhenEmpty<T> {
+  /**
+   * @param value the value to write
+   * @param path where this value sits in the document, supplied by {@link objectFrom}
+   * @returns the value's JSON form, or `undefined` for "leave the key off entirely". The one place in this
+   *   module where `undefined` means something, and it never reaches a {@link JsonValue}.
+   * @throws {@link JsonBindException} if the value is there and has no JSON representation
+   */
+  writeOrOmit(value: T, path: string): JsonValue | undefined;
+}
+
+/**
+ * A property writer per property of `T`, which is what {@link objectFrom} needs to build one.
+ *
+ * Either kind will do: an ordinary {@link JsonWriter}, which always writes its key, or an
+ * {@link OmittedWhenEmpty}, which may leave it off.
+ */
 export type JsonProperties<T> = {
-  readonly [K in keyof T]: JsonWriter<T[K]>;
+  readonly [K in keyof T]: JsonWriter<T[K]> | OmittedWhenEmpty<T[K]>;
 };
 
 /** The same path notation the readers build up, so a failure reads the same whichever direction it came from. */
@@ -190,6 +217,42 @@ export function optionalAsJson<T>(writer: JsonWriter<T>): JsonWriter<Optional<T>
 }
 
 /**
+ * The other choice {@link optionalAsJson} makes: an empty `Optional` leaves the key off the object entirely,
+ * rather than writing `null` for it. Only {@link objectFrom} accepts one — a key is the only thing a document
+ * has that can be absent.
+ *
+ * `null` and a missing key say different things, which is why both are worth being able to write. The case that
+ * makes it more than a matter of taste is JSON Merge Patch, where they say *opposite* things: a `null` in a
+ * PATCH body means delete this field, and a missing key means leave it as it is. Wrapping
+ * {@link optionalAsJson} gives all three states without anything further:
+ *
+ * ```ts
+ * interface Patch { note: Optional<Optional<string>>; }
+ *
+ * const patch = objectFrom<Patch>({ note: omitWhenEmpty(optionalAsJson(stringAsJson)) });
+ *
+ * Optional.of(Optional.of("gift wrap"))   // {"note":"gift wrap"}   set it
+ * Optional.of(Optional.empty<string>())   // {"note":null}          delete it
+ * Optional.empty()                        // {}                     leave it alone
+ * ```
+ *
+ * The nesting is the point rather than an accident of the types: a merge patch asks two questions in order, and
+ * each `Optional` answers one of them. `Optional<string | null>` cannot stand in for it — `Optional.of(null)`
+ * throws and `Optional.ofNullable(null)` is empty, so a present null is a value this `Optional` will not hold,
+ * exactly as Java's will not.
+ *
+ * The reader needs no counterpart: `optionalValue` already folds a missing key back to an empty `Optional`, so
+ * whichever of the two a contract writes, it reads back the same.
+ */
+export function omitWhenEmpty<T>(writer: JsonWriter<T>): OmittedWhenEmpty<Optional<T>> {
+  return {
+    writeOrOmit(value: Optional<T>, path: string): JsonValue | undefined {
+      return value.isPresent() ? writer.write(value.get(), path) : undefined;
+    },
+  };
+}
+
+/**
  * A JSON array, from anything iterable.
  *
  * One writer where the reading side has four. `arrayOf`, `listOf`, `setOf` and `treeSetOf` differ in what they
@@ -280,12 +343,15 @@ export function mapAsObject<V>(value: JsonWriter<V>): JsonWriter<Iterable<readon
  * const user = objectFrom<User>({ id: integerAsJson, email: stringAsJson, nickname: optionalAsJson(stringAsJson) });
  * ```
  *
- * Every property is written, in the order the contract declares them. A property that is absent at runtime is
- * refused rather than passed to its writer — the mirror of a missing key being refused on the way in, and the
- * one case where a `T` can lie: a value cast from `JSON.parse`, or one that came from a version of the type
- * without the field. `JSON.stringify` would drop the key and produce a document the reader then rejects, at
- * the far end and against the wrong party. Optionality is stated with {@link optionalAsJson}, the same way it
- * is stated with `optionalValue` when reading.
+ * Every property is written, in the order the contract declares them, unless its own writer is an
+ * {@link omitWhenEmpty} — the one way a key is left off, and the mirror of `optionalValue` accepting a missing
+ * key on the way in.
+ *
+ * A property *absent at runtime* is a different thing, and is refused rather than passed to its writer. That is
+ * the one case where a `T` can lie: a value cast from `JSON.parse`, or one that came from a version of the type
+ * without the field. `JSON.stringify` would drop the key and produce a document the reader then rejects, at the
+ * far end and against the wrong party. Absence that is meant is said with {@link optionalAsJson} or
+ * {@link omitWhenEmpty}, the same way it is said with `optionalValue` when reading.
  *
  * Pass the source type explicitly — `objectFrom<User>({...})` — so a property the contract forgets is a
  * compile error rather than a field quietly missing from everything this sends. A property declared optional —
@@ -296,8 +362,9 @@ export function objectFrom<T extends object>(properties: JsonProperties<T>): Jso
   // The same widening objectOf does, for the same reason: JsonProperties<T> is a mapped type over an
   // unresolved T, which nothing built in describes as an ordinary record. Each writer is handed back exactly
   // the property it was declared against, so the cast is sound.
-  const widened = properties as unknown as Readonly<Record<string, JsonWriter<unknown>>>;
-  const writers: readonly (readonly [string, JsonWriter<unknown>])[] = Object.entries(widened);
+  type Property = JsonWriter<unknown> | OmittedWhenEmpty<unknown>;
+  const widened = properties as unknown as Readonly<Record<string, Property>>;
+  const writers: readonly (readonly [string, Property])[] = Object.entries(widened);
   return {
     write(value: T, path: string = ROOT): JsonValue {
       const source = value as unknown as Readonly<Record<string, unknown>>;
@@ -308,7 +375,17 @@ export function objectFrom<T extends object>(properties: JsonProperties<T>): Jso
         if (held === undefined) {
           throw new JsonBindException(at, "expected a value, got nothing");
         }
-        written.push([property, writer.write(held, at)]);
+        // The two kinds of property tell themselves apart by the method they carry. An omittable one is the
+        // only thing that may answer with nothing, and nothing here means the key is left off rather than
+        // written as `undefined` — which is not a JsonValue and could not be written anyway.
+        if ("writeOrOmit" in writer) {
+          const maybe = writer.writeOrOmit(held, at);
+          if (maybe !== undefined) {
+            written.push([property, maybe]);
+          }
+        } else {
+          written.push([property, writer.write(held, at)]);
+        }
       }
       return Object.fromEntries(written);
     },

@@ -41,6 +41,7 @@ import {
   nullableAsJson,
   numberAsJson,
   objectFrom,
+  omitWhenEmpty,
   optionalAsJson,
   rawJson,
   stringAsJson,
@@ -142,6 +143,41 @@ describe("JsonWriter absence", () => {
     const dto = { nickname: Optional.empty<string>() };
     const writer = objectFrom<typeof dto>({ nickname: optionalAsJson(stringAsJson) });
     assert.equal(writeJson(dto, writer), '{"nickname":null}');
+  });
+
+  it("leaves the key off entirely when the contract says omitWhenEmpty", () => {
+    const dto = { nickname: Optional.empty<string>() };
+    const writer = objectFrom<typeof dto>({ nickname: omitWhenEmpty(stringAsJson) });
+    assert.equal(writeJson(dto, writer), "{}");
+    assert.equal(writeJson({ nickname: Optional.of("addie") }, writer), '{"nickname":"addie"}');
+  });
+
+  it("reads an omitted key back as the empty Optional it was written from", () => {
+    const dto = { nickname: Optional.empty<string>() };
+    const writer = objectFrom<typeof dto>({ nickname: omitWhenEmpty(stringAsJson) });
+    const reader = objectOf<typeof dto>({ nickname: optionalValue(stringValue) });
+    assert.ok(readJson(writeJson(dto, writer), reader).nickname.isEmpty());
+  });
+
+  it("says all three things a merge patch can say, from the pieces already here", () => {
+    // RFC 7396: a null deletes the field and a missing key leaves it alone, which are opposite instructions.
+    // Two absences, so two Optionals: was the field mentioned, and if so does it have a value.
+    interface Patch {
+      note: Optional<Optional<string>>;
+    }
+    const patch = objectFrom<Patch>({ note: omitWhenEmpty(optionalAsJson(stringAsJson)) });
+    assert.equal(writeJson({ note: Optional.of(Optional.of("gift wrap")) }, patch), '{"note":"gift wrap"}');
+    assert.equal(writeJson({ note: Optional.of(Optional.empty<string>()) }, patch), '{"note":null}');
+    assert.equal(writeJson({ note: Optional.empty<Optional<string>>() }, patch), "{}");
+    // and Optional<string | null> is not an alternative: this Optional will not hold a present null
+    assert.throws(() => Optional.of<string | null>(null), /Value cannot be null/);
+  });
+
+  it("still refuses a property missing at runtime, omittable or not", () => {
+    const writer = objectFrom<{ nickname: Optional<string> }>({ nickname: omitWhenEmpty(stringAsJson) });
+    // an empty Optional is a value that says nothing; no property at all is a value that is not there
+    const missing = {} as unknown as { nickname: Optional<string> };
+    assert.throws(() => writer.write(missing), /\$\.nickname: expected a value, got nothing/);
   });
 
   it("refuses a property that is absent, where JSON.stringify would drop the key", () => {

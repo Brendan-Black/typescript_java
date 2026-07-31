@@ -54,7 +54,7 @@ export {
   unknownValue,
   withDefault,
 } from "./serialization/JsonReader.js";
-export type { JsonProperties, JsonValue, JsonWriter } from "./serialization/JsonWriter.js";
+export type { JsonProperties, JsonValue, JsonWriter, OmittedWhenEmpty } from "./serialization/JsonWriter.js";
 export {
   arrayFrom,
   booleanAsJson,
@@ -66,6 +66,7 @@ export {
   nullableAsJson,
   numberAsJson,
   objectFrom,
+  omitWhenEmpty,
   optionalAsJson,
   rawJson,
   stringAsJson,
