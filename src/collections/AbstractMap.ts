@@ -1,16 +1,16 @@
 import { equalsOf, hashCodeOf } from "../fundamentals/Hashing.js";
-import { boilerplateEqualityCheck, _Object } from "../fundamentals/Object.js";
+import { boilerplateEqualityCheck, JavaObject } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
 import type { Serializable } from "../serialization/Serializable.js";
 import { AbstractSet, Collection, unsupported } from "./Collection.js";
-import { iteratorOver, type Iterator, mapIterator } from "./Iterator.js";
+import { iteratorOver, type JavaIterator, mapIterator } from "./Iterator.js";
 
 /**
  * One key/value pair, as handed out by {@link AbstractMap.entrySet}. Java's `Map.Entry`, minus `setValue` —
  * these are snapshots of a pair rather than a handle on the map, so writing through one would not do what it
  * looks like.
  */
-export class MapEntry<K, V> extends _Object implements Serializable {
+export class MapEntry<K, V> extends JavaObject implements Serializable {
   readonly #key: K;
   readonly #value: V;
 
@@ -57,7 +57,7 @@ export class MapEntry<K, V> extends _Object implements Serializable {
  *
  * Subclasses implement those six; `putIfAbsent`, the `compute` family, `merge`, `replace`, the three collection
  * views, `equals`, `hashCode`, `toString` and `toJSON` come for free, written against the abstract methods so
- * they stay correct however the subclass stores things. {@link Map} stores by hash, {@link TreeMap} stores in
+ * they stay correct however the subclass stores things. {@link JavaMap} stores by hash, {@link TreeMap} stores in
  * sorted order, and neither has to restate any of what is below.
  *
  * NOTE: the derived operations reach the subclass through {@link put} and {@link removeKey}, which means a
@@ -65,7 +65,7 @@ export class MapEntry<K, V> extends _Object implements Serializable {
  * called first regardless, so an unmodifiable map refuses a mutator even when the mutator would have changed
  * nothing.
  */
-export abstract class AbstractMap<K, V> extends _Object implements Iterable<[K, V]>, Serializable {
+export abstract class AbstractMap<K, V> extends JavaObject implements Iterable<[K, V]>, Serializable {
   public abstract size(): number;
 
   public abstract containsKey(key: K): boolean;
@@ -118,7 +118,7 @@ export abstract class AbstractMap<K, V> extends _Object implements Iterable<[K, 
 
   /**
    * The unambiguous {@link get}, and the reason this library has an {@link Optional} at all. Not part of Java's
-   * `Map` interface — Java resolves the same ambiguity with `getOrDefault` and `containsKey`.
+   * `JavaMap` interface — Java resolves the same ambiguity with `getOrDefault` and `containsKey`.
    *
    * NOTE: a key mapped to `null` still yields an empty Optional, because Optional cannot represent a present
    * null. Only {@link containsKey} distinguishes those two cases.
@@ -321,14 +321,14 @@ export abstract class AbstractMap<K, V> extends _Object implements Iterable<[K, 
    * notion of position, and all three views share it.
    *
    * Java reaches this only through a view, and there is nothing wrong with going the same way. It is public here
-   * because {@link Set} and {@link TreeSet} are backed by a map they do not otherwise expose, and this is
+   * because {@link JavaSet} and {@link TreeSet} are backed by a map they do not otherwise expose, and this is
    * where their own iterators come from.
    *
    * NOTE: removal takes the entry the cursor is on, without checking that the value still matches — unlike
    * `entrySet().remove(entry)`, which does check. Java draws the same line, and for the same reason: an iterator
    * knows which entry it means, where a caller holding an entry only has a description of one.
    */
-  public entryIterator(): Iterator<MapEntry<K, V>> {
+  public entryIterator(): JavaIterator<MapEntry<K, V>> {
     return iteratorOver<MapEntry<K, V>>({
       elements: [...this.entries()],
       modCount: () => this.modCount(),
@@ -388,8 +388,8 @@ export abstract class AbstractMap<K, V> extends _Object implements Iterable<[K, 
    * Java's `AbstractMap.equals`: same size, and every key maps to an equal value. Order is not part of it, so
    * two maps built by different insertion sequences are still equal.
    *
-   * Written against any other map rather than against one class, as Java's is written against the `Map`
-   * interface — a {@link Map} and a {@link TreeMap} holding the same entries are equal, the same way a hash
+   * Written against any other map rather than against one class, as Java's is written against the `JavaMap`
+   * interface — a {@link JavaMap} and a {@link TreeMap} holding the same entries are equal, the same way a hash
    * set and a `keySet()` view are. That comparison asks each map about the other's keys using its own notion of
    * sameness, so a key type whose `compareTo` disagrees with its `equals` can make the answer asymmetric. That
    * is the consistency-with-equals contract {@link Comparable} describes, and it is not enforced here any more
@@ -401,7 +401,7 @@ export abstract class AbstractMap<K, V> extends _Object implements Iterable<[K, 
     }
     // isInstance, not instanceof: a prototype-only forgery would pass the latter and then throw a TypeError out
     // of the first method call below, and equals is required to answer rather than blow up.
-    if (!_Object.isInstance(other) || !(other instanceof AbstractMap)) {
+    if (!JavaObject.isInstance(other) || !(other instanceof AbstractMap)) {
       return false;
     }
     const otherMap = other as AbstractMap<K, V>;
@@ -492,7 +492,7 @@ class KeySetView<K, V> extends AbstractSet<K> {
     return this.#map.keys();
   }
 
-  public iterator(): Iterator<K> {
+  public iterator(): JavaIterator<K> {
     return mapIterator(this.#map.entryIterator(), (entry) => entry.getKey());
   }
 }
@@ -542,7 +542,7 @@ class ValuesView<K, V> extends Collection<V> {
    * equal value. For a values view, where repeats are the whole reason it is a collection rather than a set,
    * that difference is the point of having an iterator at all.
    */
-  public iterator(): Iterator<V> {
+  public iterator(): JavaIterator<V> {
     return mapIterator(this.#map.entryIterator(), (entry) => entry.getValue());
   }
 }
@@ -561,7 +561,7 @@ class EntrySetView<K, V> extends AbstractSet<MapEntry<K, V>> {
   }
 
   public contains(value: MapEntry<K, V>): boolean {
-    if (!_Object.isInstance(value) || !(value instanceof MapEntry)) {
+    if (!JavaObject.isInstance(value) || !(value instanceof MapEntry)) {
       return false;
     }
     const key = value.getKey();
@@ -574,7 +574,7 @@ class EntrySetView<K, V> extends AbstractSet<MapEntry<K, V>> {
 
   /** Removes only if the entry's value still matches what the map holds, as Java's entry set does. */
   public remove(value: MapEntry<K, V>): boolean {
-    if (!_Object.isInstance(value) || !(value instanceof MapEntry)) {
+    if (!JavaObject.isInstance(value) || !(value instanceof MapEntry)) {
       return false;
     }
     return this.#map.remove(value.getKey(), value.getValue());
@@ -588,7 +588,7 @@ class EntrySetView<K, V> extends AbstractSet<MapEntry<K, V>> {
     return this.#map.entries();
   }
 
-  public iterator(): Iterator<MapEntry<K, V>> {
+  public iterator(): JavaIterator<MapEntry<K, V>> {
     return this.#map.entryIterator();
   }
 }

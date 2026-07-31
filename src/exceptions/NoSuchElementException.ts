@@ -3,7 +3,7 @@ import { RuntimeException } from "./RuntimeException.js";
 /**
  * Java's `NoSuchElementException`: something was asked for an element it does not have.
  *
- * In Java this is what an exhausted `Iterator.next()` throws, and — the case that matters here — what
+ * In Java this is what an exhausted `JavaIterator.next()` throws, and — the case that matters here — what
  * `Optional.get()` and the no-argument `Optional.orElseThrow()` throw when the Optional is empty.
  *
  * The distinction from {@link IllegalStateException} is worth keeping rather than collapsing. An

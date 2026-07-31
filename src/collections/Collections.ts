@@ -4,8 +4,8 @@ import { elementAt } from "../fundamentals/Indexing.js";
 import type { AbstractMap } from "./AbstractMap.js";
 import type { AbstractSet } from "./Collection.js";
 import { List } from "./List.js";
-import { Map } from "./Map.js";
-import { Set } from "./Set.js";
+import { JavaMap } from "./Map.js";
+import { JavaSet } from "./Set.js";
 import { TreeMap } from "./TreeMap.js";
 import { TreeSet } from "./TreeSet.js";
 
@@ -27,23 +27,23 @@ import { TreeSet } from "./TreeSet.js";
  */
 
 /**
- * Java's `Collections.unmodifiableMap`: a read-only view of a map. See {@link Map.unmodifiable}.
+ * Java's `Collections.unmodifiableMap`: a read-only view of a map. See {@link JavaMap.unmodifiable}.
  *
  * Overloaded rather than written against {@link AbstractMap}, so the sorted map keeps its type: Java's
- * `unmodifiableSortedMap` is a separate method for the same reason, since a view typed as a plain `Map` would
+ * `unmodifiableSortedMap` is a separate method for the same reason, since a view typed as a plain `JavaMap` would
  * have lost `firstKey` and the rest of the navigation on the way through.
  */
 export function unmodifiableMap<K, V>(map: TreeMap<K, V>): TreeMap<K, V>;
-export function unmodifiableMap<K, V>(map: Map<K, V>): Map<K, V>;
-export function unmodifiableMap<K, V>(map: Map<K, V> | TreeMap<K, V>): AbstractMap<K, V> {
-  return map instanceof TreeMap ? TreeMap.unmodifiable(map) : Map.unmodifiable(map);
+export function unmodifiableMap<K, V>(map: JavaMap<K, V>): JavaMap<K, V>;
+export function unmodifiableMap<K, V>(map: JavaMap<K, V> | TreeMap<K, V>): AbstractMap<K, V> {
+  return map instanceof TreeMap ? TreeMap.unmodifiable(map) : JavaMap.unmodifiable(map);
 }
 
-/** Java's `Collections.unmodifiableSet`: a read-only view of a set. See {@link Set.unmodifiable}. */
+/** Java's `Collections.unmodifiableSet`: a read-only view of a set. See {@link JavaSet.unmodifiable}. */
 export function unmodifiableSet<T>(set: TreeSet<T>): TreeSet<T>;
-export function unmodifiableSet<T>(set: Set<T>): Set<T>;
-export function unmodifiableSet<T>(set: Set<T> | TreeSet<T>): AbstractSet<T> {
-  return set instanceof TreeSet ? TreeSet.unmodifiable(set) : Set.unmodifiable(set);
+export function unmodifiableSet<T>(set: JavaSet<T>): JavaSet<T>;
+export function unmodifiableSet<T>(set: JavaSet<T> | TreeSet<T>): AbstractSet<T> {
+  return set instanceof TreeSet ? TreeSet.unmodifiable(set) : JavaSet.unmodifiable(set);
 }
 
 /** Java's `Collections.unmodifiableList`: a read-only view of a list. See {@link List.unmodifiable}. */
@@ -52,13 +52,13 @@ export function unmodifiableList<T>(list: List<T>): List<T> {
 }
 
 /** Java's `Collections.emptyMap`. Immutable, and a fresh instance each call rather than a shared singleton. */
-export function emptyMap<K, V>(): Map<K, V> {
-  return Map.of<K, V>();
+export function emptyMap<K, V>(): JavaMap<K, V> {
+  return JavaMap.of<K, V>();
 }
 
 /** Java's `Collections.emptySet`. */
-export function emptySet<T>(): Set<T> {
-  return Set.of<T>();
+export function emptySet<T>(): JavaSet<T> {
+  return JavaSet.of<T>();
 }
 
 /** Java's `Collections.emptyList`. */
@@ -67,13 +67,13 @@ export function emptyList<T>(): List<T> {
 }
 
 /** Java's `Collections.singletonMap`: an immutable map holding exactly one entry. */
-export function singletonMap<K, V>(key: K, value: V): Map<K, V> {
-  return Map.of<K, V>([key, value]);
+export function singletonMap<K, V>(key: K, value: V): JavaMap<K, V> {
+  return JavaMap.of<K, V>([key, value]);
 }
 
 /** Java's `Collections.singleton`: an immutable set holding exactly one element. */
-export function singleton<T>(value: T): Set<T> {
-  return Set.of<T>(value);
+export function singleton<T>(value: T): JavaSet<T> {
+  return JavaSet.of<T>(value);
 }
 
 /** Java's `Collections.singletonList`: an immutable list holding exactly one element. */
@@ -106,7 +106,7 @@ export function sort<T>(list: List<T>, comparator?: (a: T, b: T) => number): voi
 /**
  * Java's `Collections.max`: the greatest element, by natural order or by the comparator given.
  *
- * Takes any iterable rather than only a collection, so an array or a plain `Set` works too. Ties go to the
+ * Takes any iterable rather than only a collection, so an array or a plain `JavaSet` works too. Ties go to the
  * element seen first, matching Java — the comparison is strict, so a later equal element does not displace an
  * earlier one.
  *

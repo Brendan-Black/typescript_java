@@ -1,7 +1,7 @@
 import { MapEntry } from "../collections/AbstractMap.js";
 import { List } from "../collections/List.js";
-import { Map } from "../collections/Map.js";
-import { Set } from "../collections/Set.js";
+import { JavaMap } from "../collections/Map.js";
+import { JavaSet } from "../collections/Set.js";
 import { TreeMap } from "../collections/TreeMap.js";
 import { TreeSet } from "../collections/TreeSet.js";
 import { JsonBindException } from "../exceptions/JsonBindException.js";
@@ -159,7 +159,7 @@ export const unknownValue: JsonReader<unknown> = {
  * ```
  */
 export function enumOf<T extends string>(...values: readonly T[]): JsonReader<T> {
-  const allowed = new globalThis.Set<string>(values);
+  const allowed = new Set<string>(values);
   return {
     read(value: unknown, path: string = ROOT): T {
       const text = stringValue.read(value, path);
@@ -249,13 +249,13 @@ export function listOf<T>(element: JsonReader<T>): JsonReader<List<T>> {
 }
 
 /**
- * A JSON array as a {@link Set}.
+ * A JSON array as a {@link JavaSet}.
  *
  * Elements that are `equals` collapse into one, silently — a set is what the contract asked for, and a document
  * repeating a member is not obviously wrong. Read it as a {@link listOf} first if the count matters.
  */
-export function setOf<T>(element: JsonReader<T>): JsonReader<Set<T>> {
-  return mapping(arrayOf(element), (items) => new Set<T>(items));
+export function setOf<T>(element: JsonReader<T>): JsonReader<JavaSet<T>> {
+  return mapping(arrayOf(element), (items) => new JavaSet<T>(items));
 }
 
 /** A JSON array as a {@link TreeSet}, in the given order or in natural order when none is given. */
@@ -295,16 +295,16 @@ function pairsOf<K, V>(key: JsonReader<K>, value: JsonReader<V>): JsonReader<[K,
 }
 
 /**
- * A {@link Map} from the array of `[key, value]` pairs `Map.toJSON` writes.
+ * A {@link JavaMap} from the array of `[key, value]` pairs `JavaMap.toJSON` writes.
  *
  * Pairs rather than a JSON object because a map here may be keyed on anything — numbers, nulls, whole
- * `_Object`s — and JSON object keys can only be strings. For the object form a Java backend produces for a
- * `Map<String, V>`, see {@link objectAsMap}.
+ * `JavaObject`s — and JSON object keys can only be strings. For the object form a Java backend produces for a
+ * `JavaMap<String, V>`, see {@link objectAsMap}.
  *
  * A document repeating a key keeps the last pair, matching the constructor this feeds.
  */
-export function mapOf<K, V>(key: JsonReader<K>, value: JsonReader<V>): JsonReader<Map<K, V>> {
-  return mapping(pairsOf(key, value), (pairs) => new Map<K, V>(pairs));
+export function mapOf<K, V>(key: JsonReader<K>, value: JsonReader<V>): JsonReader<JavaMap<K, V>> {
+  return mapping(pairsOf(key, value), (pairs) => new JavaMap<K, V>(pairs));
 }
 
 /** A {@link TreeMap} from the same pair form {@link mapOf} reads, in the given order or in natural order. */
@@ -319,17 +319,17 @@ export function treeMapOf<K, V>(
 }
 
 /**
- * A JSON object read as a map of string keys to values — what Jackson emits for a Java `Map<String, V>`, and
+ * A JSON object read as a map of string keys to values — what Jackson emits for a Java `JavaMap<String, V>`, and
  * therefore what a Spring endpoint most often sends.
  *
  * The counterpart to {@link mapOf}, which reads this library's own pair form. Only string keys are reachable this
  * way, which is the limitation that made the pair form the default for writing.
  */
-export function objectAsMap<V>(value: JsonReader<V>): JsonReader<Map<string, V>> {
+export function objectAsMap<V>(value: JsonReader<V>): JsonReader<JavaMap<string, V>> {
   return {
-    read(source: unknown, path: string = ROOT): Map<string, V> {
+    read(source: unknown, path: string = ROOT): JavaMap<string, V> {
       const object = requireObject(source, path);
-      const map = new Map<string, V>();
+      const map = new JavaMap<string, V>();
       for (const key of Object.keys(object)) {
         map.put(key, value.read(object[key], `${path}.${key}`));
       }

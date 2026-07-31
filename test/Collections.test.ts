@@ -18,8 +18,8 @@ import {
   unmodifiableSet,
 } from "../src/collections/Collections.js";
 import { List } from "../src/collections/List.js";
-import { Map } from "../src/collections/Map.js";
-import { Set } from "../src/collections/Set.js";
+import { JavaMap } from "../src/collections/Map.js";
+import { JavaSet } from "../src/collections/Set.js";
 import { ClassCastException } from "../src/exceptions/ClassCastException.js";
 import { IndexOutOfBoundsException } from "../src/exceptions/IndexOutOfBoundsException.js";
 import { NoSuchElementException } from "../src/exceptions/NoSuchElementException.js";
@@ -27,8 +27,8 @@ import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOper
 import { comparing, naturalOrder, nullsLast, reverseOrder } from "../src/fundamentals/Comparator.js";
 
 describe("immutable factories", () => {
-  it("Map.of holds its entries and refuses mutation", () => {
-    const map = Map.of<string, number>(["a", 1], ["b", 2]);
+  it("JavaMap.of holds its entries and refuses mutation", () => {
+    const map = JavaMap.of<string, number>(["a", 1], ["b", 2]);
     assert.equal(map.get("a"), 1);
     assert.equal(map.size(), 2);
     assert.throws(() => map.put("c", 3), UnsupportedOperationException);
@@ -40,8 +40,8 @@ describe("immutable factories", () => {
     assert.throws(() => map.replaceAll((v) => v), UnsupportedOperationException);
   });
 
-  it("Set.of holds its members and refuses mutation", () => {
-    const set = Set.of(1, 2, 3);
+  it("JavaSet.of holds its members and refuses mutation", () => {
+    const set = JavaSet.of(1, 2, 3);
     assert.equal(set.contains(2), true);
     assert.throws(() => set.add(4), UnsupportedOperationException);
     assert.throws(() => set.remove(1), UnsupportedOperationException);
@@ -50,9 +50,9 @@ describe("immutable factories", () => {
     assert.throws(() => set.retainAll([1]), UnsupportedOperationException);
   });
 
-  it("Set.of collapses duplicate arguments rather than rejecting them", () => {
+  it("JavaSet.of collapses duplicate arguments rather than rejecting them", () => {
     // Java's Set.of throws on a duplicate; following the constructor here is the less surprising of the two
-    assert.equal(Set.of(1, 1, 2).size(), 2);
+    assert.equal(JavaSet.of(1, 1, 2).size(), 2);
   });
 
   it("empty factories produce empty, immutable collections", () => {
@@ -83,7 +83,7 @@ describe("immutable factories", () => {
 
 describe("unmodifiable views", () => {
   it("read through to the original", () => {
-    const base = new Map<string, number>([["a", 1]]);
+    const base = new JavaMap<string, number>([["a", 1]]);
     const view = unmodifiableMap(base);
     assert.equal(view.get("a"), 1);
     assert.equal(view.size(), 1);
@@ -93,7 +93,7 @@ describe("unmodifiable views", () => {
   it("stay live as the original changes", () => {
     // Java's behaviour, and the usual surprise with it: the wrapper protects you from your caller, not your
     // caller from you
-    const base = new Map<string, number>([["a", 1]]);
+    const base = new JavaMap<string, number>([["a", 1]]);
     const view = unmodifiableMap(base);
     base.put("b", 2);
     assert.equal(view.size(), 2);
@@ -103,20 +103,20 @@ describe("unmodifiable views", () => {
   });
 
   it("refuse mutation on maps, sets and lists alike", () => {
-    assert.throws(() => unmodifiableMap(new Map<string, number>()).put("a", 1), UnsupportedOperationException);
-    assert.throws(() => unmodifiableSet(new Set<number>()).add(1), UnsupportedOperationException);
+    assert.throws(() => unmodifiableMap(new JavaMap<string, number>()).put("a", 1), UnsupportedOperationException);
+    assert.throws(() => unmodifiableSet(new JavaSet<number>()).add(1), UnsupportedOperationException);
     assert.throws(() => unmodifiableList(new List<number>()).add(1), UnsupportedOperationException);
   });
 
   it("leave the original writable", () => {
-    const base = new Set<number>([1]);
+    const base = new JavaSet<number>([1]);
     unmodifiableSet(base);
     assert.equal(base.add(2), true);
     assert.equal(base.size(), 2);
   });
 
   it("propagate the refusal through a map's views", () => {
-    const view = unmodifiableMap(new Map<string, number>([["a", 1]]));
+    const view = unmodifiableMap(new JavaMap<string, number>([["a", 1]]));
     assert.throws(() => view.keySet().remove("a"), UnsupportedOperationException);
     assert.throws(() => view.values().remove(1), UnsupportedOperationException);
     assert.throws(() => view.keySet().clear(), UnsupportedOperationException);
@@ -131,7 +131,7 @@ describe("unmodifiable views", () => {
   });
 
   it("are still equal to the collection they wrap", () => {
-    const set = new Set<number>([1, 2]);
+    const set = new JavaSet<number>([1, 2]);
     assert.equal(unmodifiableSet(set).equals(set), true);
     assert.equal(unmodifiableSet(set).hashCode(), set.hashCode());
   });
@@ -218,8 +218,8 @@ describe("max and min", () => {
 
   it("accept any iterable, not just a Collection", () => {
     assert.equal(max([3, 1, 2]), 3);
-    assert.equal(min(new Set<string>(["b", "a", "c"])), "a");
-    assert.equal(max(new Set<number>([1, 5, 3])), 5);
+    assert.equal(min(new JavaSet<string>(["b", "a", "c"])), "a");
+    assert.equal(max(new JavaSet<number>([1, 5, 3])), 5);
   });
 
   it("keep the first of equal elements, as Java does", () => {
@@ -371,13 +371,13 @@ describe("removeIf", () => {
   });
 
   it("works on a set", () => {
-    const set = new Set<string>(["apple", "fig", "banana"]);
+    const set = new JavaSet<string>(["apple", "fig", "banana"]);
     assert.equal(set.removeIf((value) => value.length > 3), true);
     assert.deepEqual(set.toArray(), ["fig"]);
   });
 
   it("works through a map's key view, taking the entries with it", () => {
-    const map = new Map<string, number>([["a", 1], ["bb", 2], ["ccc", 3]]);
+    const map = new JavaMap<string, number>([["a", 1], ["bb", 2], ["ccc", 3]]);
     assert.equal(map.keySet().removeIf((key) => key.length > 1), true);
     assert.deepEqual(map.keySet().toArray(), ["a"]);
     assert.equal(map.size(), 1);

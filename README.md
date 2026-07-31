@@ -68,15 +68,17 @@ Java.Collections.sort(names);
 ```
 
 The namespace re-exports its bindings rather than wrapping them, so there is no indirection to pay for and
-`instanceof` is exactly what you would expect. The classes are *declared* under these same names — the file is
-`collections/Map.ts` and the declaration is `class Map` — so `constructor.name` carries Java's name too, and a
-stack trace reads `Map`, not something internal. Where a class shadows the global it is built on, that module
-reaches the global through `globalThis`: `Map` keeps its buckets in a `globalThis.Map`.
+`instanceof` is exactly what you would expect. Five of them are *declared* under a prefixed name and renamed
+here: `JavaObject`, `JavaMap`, `JavaSet`, `JavaIterator` and `JavaListIterator`. Those are the five with a
+JavaScript global behind them, and a class declared under one would shadow, inside its own module, the global it
+is built on — `Map` keeps its buckets in a real `Map`, and `Object.getPrototypeOf` is what the equality helper
+calls. TypeScript refuses `class Object` outright besides, with `error TS2725`.
 
-One name resists. TypeScript refuses a class declaration named `Object` outright — `error TS2725` — whatever the
-module does about the global, so that one is declared `_Object` and renamed at the boundary. It is the only
-place where the exported name and the declared one differ, and `Java.Object.name` is `"_Object"` in consequence.
-Subclasses are unaffected: they print their own name, which is what `toString()` is for.
+Nothing else is renamed. `List`, `Collection`, `AbstractSet`, `AbstractMap`, `MapEntry`, `TreeMap`, `TreeSet` and
+`Throwable` have no global to collide with, so they are declared under Java's own names and pass straight
+through. The consequence is visible in `constructor.name`, and so in a stack trace: `Java.Map` reports `JavaMap`,
+`Java.List` reports `List`. Subclasses are unaffected either way — they print their own name, which is what
+`toString()` is for.
 
 Java's static-utility classes are sub-namespaces, which restores the reading they have in Java: `Java.Collections`
 carries `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap` and the factories; `Java.Objects` carries

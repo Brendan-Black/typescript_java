@@ -6,7 +6,7 @@ import { elementAt } from "../fundamentals/Indexing.js";
 import { AbstractMap, MapEntry } from "./AbstractMap.js";
 import { unsupported } from "./Collection.js";
 
-/** One key/value pair in sorted position. The key is fixed for the entry's lifetime, as it is in {@link Map}. */
+/** One key/value pair in sorted position. The key is fixed for the entry's lifetime, as it is in {@link JavaMap}. */
 interface TreeEntry<K, V> {
   readonly key: K;
   value: V;
@@ -48,7 +48,7 @@ interface RangeBounds<K> {
 /**
  * Java's `TreeMap`: a map that keeps its keys in order rather than in buckets.
  *
- * Where {@link Map} asks a key for its `hashCode`, this asks how it compares — which is what you want when
+ * Where {@link JavaMap} asks a key for its `hashCode`, this asks how it compares — which is what you want when
  * the key type has a sensible order but no trustworthy hash, and it is the only way to ask a map the questions
  * below:
  *
@@ -113,8 +113,8 @@ export class TreeMap<K, V> extends AbstractMap<K, V> {
   }
 
   /**
-   * An immutable sorted map, refusing every mutator. There is no `Map.of` in Java that sorts; this is the
-   * `TreeMap` analogue of {@link Map.of}.
+   * An immutable sorted map, refusing every mutator. There is no `JavaMap.of` in Java that sorts; this is the
+   * `TreeMap` analogue of {@link JavaMap.of}.
    *
    * Natural order only, and the key type is constrained to prove it has one — a compile error rather than a
    * `ClassCastException` on the first insertion.
@@ -129,7 +129,7 @@ export class TreeMap<K, V> extends AbstractMap<K, V> {
    * Java's `Collections.unmodifiableSortedMap`: a read-only *view*, not a copy.
    *
    * The view shares the original's storage and its comparator, so later changes to the original show through —
-   * see {@link Map.unmodifiable} for why that is worth knowing before you hand one out.
+   * see {@link JavaMap.unmodifiable} for why that is worth knowing before you hand one out.
    *
    * Wrapping a range view keeps its bounds, so an unmodifiable `subMap` sees exactly what the `subMap` did.
    */

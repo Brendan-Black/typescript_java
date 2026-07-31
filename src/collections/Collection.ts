@@ -1,8 +1,8 @@
 import { UnsupportedOperationException } from "../exceptions/UnsupportedOperationException.js";
 import { equalsOf, hashCodeOf } from "../fundamentals/Hashing.js";
-import { _Object } from "../fundamentals/Object.js";
+import { JavaObject } from "../fundamentals/Object.js";
 import type { Serializable } from "../serialization/Serializable.js";
-import type { Iterator } from "./Iterator.js";
+import type { JavaIterator } from "./Iterator.js";
 
 /**
  * Java's `AbstractCollection`: everything a collection can do once it can report its size, answer `contains`,
@@ -14,7 +14,7 @@ import type { Iterator } from "./Iterator.js";
  * NOTE: the bulk operations snapshot their argument before touching this collection. That makes
  * `a.removeAll(a)` and `a.addAll(a)` well-defined rather than a fail-fast iterator tripping over itself.
  */
-export abstract class Collection<T> extends _Object implements Iterable<T>, Serializable {
+export abstract class Collection<T> extends JavaObject implements Iterable<T>, Serializable {
   public abstract size(): number;
 
   public abstract contains(value: T): boolean;
@@ -31,13 +31,13 @@ export abstract class Collection<T> extends _Object implements Iterable<T>, Seri
 
   /**
    * Java's `Iterable.iterator()`: a cursor the caller drives, and the only way to remove an element while
-   * walking. See {@link Iterator}.
+   * walking. See {@link JavaIterator}.
    *
-   * Abstract rather than derived because a correct {@link Iterator.remove} needs the subclass's own storage —
+   * Abstract rather than derived because a correct {@link JavaIterator.remove} needs the subclass's own storage —
    * its structural-modification count, and a removal that takes out the element the cursor is on rather than the
    * first one equal to it.
    */
-  public abstract iterator(): Iterator<T>;
+  public abstract iterator(): JavaIterator<T>;
 
   public isEmpty(): boolean {
     return this.size() === 0;
@@ -86,7 +86,7 @@ export abstract class Collection<T> extends _Object implements Iterable<T>, Seri
    * NOTE: the doomed elements are removed by value, so a predicate that accepts one of two `equals` elements but
    * not the other is not honoured element-by-element. Keep the predicate a function of the value, as `equals`
    * already assumes, and the question does not arise. When it has to — when the same value in two positions
-   * deserves two answers — walk {@link iterator} and call {@link Iterator.remove}, which is exact.
+   * deserves two answers — walk {@link iterator} and call {@link JavaIterator.remove}, which is exact.
    *
    * @returns whether the collection changed
    */
@@ -152,7 +152,7 @@ export function unsupported(operation: string, reason: string): never {
  * Both are order-independent, which is what makes them agree with each other: summing element hashes gives the
  * same total whatever order the elements arrive in.
  *
- * `equals` compares against any other set, not just the same class — Java's is written against the `Set`
+ * `equals` compares against any other set, not just the same class — Java's is written against the `JavaSet`
  * interface, and here that means anything descending from this class. A hash set and a map's `keySet()` view
  * holding the same members are equal, as they should be.
  */
@@ -163,7 +163,7 @@ export abstract class AbstractSet<T> extends Collection<T> {
     }
     // isInstance, not instanceof: a prototype-only forgery would pass the latter and then throw a TypeError out
     // of the first method call below, and equals is required to answer rather than blow up.
-    if (!_Object.isInstance(other) || !(other instanceof AbstractSet)) {
+    if (!JavaObject.isInstance(other) || !(other instanceof AbstractSet)) {
       return false;
     }
     const otherSet = other as AbstractSet<T>;

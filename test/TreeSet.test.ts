@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { max, min, unmodifiableSet } from "../src/collections/Collections.js";
 import { AbstractSet } from "../src/collections/Collection.js";
-import { Set } from "../src/collections/Set.js";
+import { JavaSet } from "../src/collections/Set.js";
 import { TreeSet } from "../src/collections/TreeSet.js";
 import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
@@ -85,9 +85,9 @@ describe("TreeSet membership", () => {
   it("is a AbstractSet, so it equals a hash set with the same members", () => {
     const tree = names();
     assert.equal(tree instanceof AbstractSet, true);
-    assert.equal(tree.equals(new Set<string>(["bob", "carol", "alice"])), true);
-    assert.equal(new Set<string>(["bob", "carol", "alice"]).equals(tree), true);
-    assert.equal(tree.hashCode(), new Set<string>(["alice", "bob", "carol"]).hashCode());
+    assert.equal(tree.equals(new JavaSet<string>(["bob", "carol", "alice"])), true);
+    assert.equal(new JavaSet<string>(["bob", "carol", "alice"]).equals(tree), true);
+    assert.equal(tree.hashCode(), new JavaSet<string>(["alice", "bob", "carol"]).hashCode());
   });
 
   it("formats and serialises like any other collection, in order", () => {

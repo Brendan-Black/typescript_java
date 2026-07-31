@@ -2,14 +2,14 @@ import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { Collection } from "../src/collections/Collection.js";
 import { List } from "../src/collections/List.js";
-import { Set } from "../src/collections/Set.js";
+import { JavaSet } from "../src/collections/Set.js";
 import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
 import { IndexOutOfBoundsException } from "../src/exceptions/IndexOutOfBoundsException.js";
 import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
 import { hashAll } from "../src/fundamentals/Hashing.js";
-import { boilerplateEqualityCheck, _Object } from "../src/fundamentals/Object.js";
+import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
 
-class Point extends _Object {
+class Point extends JavaObject {
   constructor(public readonly x: number, public readonly y: number) {
     super();
   }
@@ -31,8 +31,8 @@ describe("List basics", () => {
 
   it("builds from anything iterable", () => {
     assert.deepEqual(new List<number>([1, 2, 3]).toArray(), [1, 2, 3]);
-    assert.deepEqual(new List<number>(new globalThis.Set([1, 2])).toArray(), [1, 2]);
-    assert.deepEqual(new List<number>(new Set<number>([4, 5])).toArray(), [4, 5]);
+    assert.deepEqual(new List<number>(new Set([1, 2])).toArray(), [1, 2]);
+    assert.deepEqual(new List<number>(new JavaSet<number>([4, 5])).toArray(), [4, 5]);
     assert.deepEqual(new List<number>().toArray(), []);
   });
 
@@ -267,7 +267,7 @@ describe("List.equals and hashCode", () => {
   });
 
   it("is not equal to a set holding the same elements", () => {
-    assert.equal(new List<number>([1, 2]).equals(new Set<number>([1, 2])), false);
+    assert.equal(new List<number>([1, 2]).equals(new JavaSet<number>([1, 2])), false);
   });
 
   it("returns false, and does not throw, for junk arguments", () => {

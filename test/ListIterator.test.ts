@@ -10,7 +10,7 @@ import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOper
 
 const letters = (): List<string> => new List<string>(["a", "b", "c"]);
 
-describe("ListIterator positions", () => {
+describe("JavaListIterator positions", () => {
   it("starts at the front, between nothing and the first element", () => {
     const it = letters().listIterator();
     assert.equal(it.nextIndex(), 0);
@@ -74,7 +74,7 @@ describe("ListIterator positions", () => {
   });
 });
 
-describe("ListIterator.set", () => {
+describe("JavaListIterator.set", () => {
   it("replaces the element last returned by next", () => {
     const list = letters();
     const it = list.listIterator();
@@ -131,7 +131,7 @@ describe("ListIterator.set", () => {
   });
 });
 
-describe("ListIterator.add", () => {
+describe("JavaListIterator.add", () => {
   it("inserts at the cursor and steps over what it inserted", () => {
     const list = letters();
     const it = list.listIterator();
@@ -187,7 +187,7 @@ describe("ListIterator.add", () => {
   });
 });
 
-describe("ListIterator.remove", () => {
+describe("JavaListIterator.remove", () => {
   it("removes what next returned, and keeps the walk in step", () => {
     const list = letters();
     const it = list.listIterator();
@@ -227,7 +227,7 @@ describe("ListIterator.remove", () => {
   });
 });
 
-describe("ListIterator fail-fast", () => {
+describe("JavaListIterator fail-fast", () => {
   it("does not trip on its own writes", () => {
     const list = letters();
     const it = list.listIterator();
@@ -279,7 +279,7 @@ describe("ListIterator fail-fast", () => {
   });
 });
 
-describe("ListIterator on an unmodifiable list", () => {
+describe("JavaListIterator on an unmodifiable list", () => {
   it("still walks in both directions", () => {
     const view = unmodifiableList(letters());
     const it = view.listIterator(view.size());

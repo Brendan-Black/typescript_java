@@ -1,7 +1,7 @@
 import { NoSuchElementException } from "../exceptions/NoSuchElementException.js";
 import type { NaturallyOrdered } from "../fundamentals/Comparable.js";
 import { AbstractSet, unsupported } from "./Collection.js";
-import { type Iterator, mapIterator } from "./Iterator.js";
+import { type JavaIterator, mapIterator } from "./Iterator.js";
 import { TreeMap } from "./TreeMap.js";
 
 /**
@@ -20,7 +20,7 @@ import { TreeMap } from "./TreeMap.js";
  * sorted array buys, and — most importantly — that membership is decided by *comparing*, not by `equals`. Two
  * members that compare equal are one member here, whatever `equals` says.
  *
- * That last point is the one to watch when a `TreeSet` meets a {@link Set}. `equals` on both is inherited
+ * That last point is the one to watch when a `TreeSet` meets a {@link JavaSet}. `equals` on both is inherited
  * from {@link AbstractSet} and is written in terms of `containsAll`, so each set answers using its own
  * notion of sameness. With a comparator consistent with `equals` — the contract {@link Comparable} asks for —
  * the two agree; without one, they can disagree in either direction.
@@ -70,7 +70,7 @@ export class TreeSet<T> extends AbstractSet<T> {
    * Java's `Collections.unmodifiableSortedSet`: a read-only *view*, not a copy.
    *
    * The view shares the original's storage, so later changes to the original show through — see
-   * {@link Map.unmodifiable} for why that is worth knowing before you hand one out.
+   * {@link JavaMap.unmodifiable} for why that is worth knowing before you hand one out.
    */
   public static unmodifiable<T>(set: TreeSet<T>): TreeSet<T> {
     const view = new TreeSet<T>();
@@ -285,10 +285,10 @@ export class TreeSet<T> extends AbstractSet<T> {
 
   /**
    * The backing map's cursor, read as keys, so the walk is in order and removal takes the member it is standing
-   * on. The read-only check belongs here for the same reason it does in {@link Set.iterator}: {@link of}
+   * on. The read-only check belongs here for the same reason it does in {@link JavaSet.iterator}: {@link of}
    * marks the set unmodifiable, not the map.
    */
-  public iterator(): Iterator<T> {
+  public iterator(): JavaIterator<T> {
     return mapIterator(
       this.#map.entryIterator(),
       (entry) => entry.getKey(),

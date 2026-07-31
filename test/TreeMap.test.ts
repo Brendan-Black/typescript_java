@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { unmodifiableMap } from "../src/collections/Collections.js";
 import { MapEntry } from "../src/collections/AbstractMap.js";
-import { Map } from "../src/collections/Map.js";
+import { JavaMap } from "../src/collections/Map.js";
 import { TreeMap } from "../src/collections/TreeMap.js";
 import { ClassCastException } from "../src/exceptions/ClassCastException.js";
 import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
@@ -11,10 +11,10 @@ import { NoSuchElementException } from "../src/exceptions/NoSuchElementException
 import { NullPointerException } from "../src/exceptions/NullPointerException.js";
 import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
 import { comparing, naturalOrder, reverseOrder } from "../src/fundamentals/Comparator.js";
-import { _Object } from "../src/fundamentals/Object.js";
+import { JavaObject } from "../src/fundamentals/Object.js";
 
 /** a key whose order deliberately ignores part of its identity, so "compares equal" and "is equal" can diverge */
-class Version extends _Object {
+class Version extends JavaObject {
   constructor(public readonly major: number, public readonly label: string) {
     super();
   }
@@ -27,7 +27,7 @@ class Version extends _Object {
 }
 
 /** a Java.Object with no order of its own — the case a natural-order TreeMap has to refuse */
-class Unordered extends _Object {}
+class Unordered extends JavaObject {}
 
 const letters = (): TreeMap<string, number> =>
   new TreeMap<string, number>([["carol", 3], ["alice", 1], ["bob", 2]]);
@@ -114,7 +114,7 @@ describe("TreeMap as a map", () => {
 
   it("equals another map with the same entries, whichever kind it is", () => {
     const tree = letters();
-    const hash = new Map<string, number>([["bob", 2], ["carol", 3], ["alice", 1]]);
+    const hash = new JavaMap<string, number>([["bob", 2], ["carol", 3], ["alice", 1]]);
     assert.equal(tree.equals(hash), true);
     assert.equal(hash.equals(tree), true);
     assert.equal(tree.hashCode(), hash.hashCode());
@@ -141,7 +141,7 @@ describe("TreeMap as a map", () => {
 
 describe("TreeMap key requirements", () => {
   it("rejects a key with no natural order, on the very first insertion", () => {
-    const map = new TreeMap<_Object, number>();
+    const map = new TreeMap<JavaObject, number>();
     assert.throws(() => map.put(new Unordered(), 1), ClassCastException);
   });
 
@@ -151,7 +151,7 @@ describe("TreeMap key requirements", () => {
   });
 
   it("accepts whatever the comparator accepts", () => {
-    const map = new TreeMap<_Object, number>(() => 0);
+    const map = new TreeMap<JavaObject, number>(() => 0);
     assert.doesNotThrow(() => map.put(new Unordered(), 1));
   });
 });

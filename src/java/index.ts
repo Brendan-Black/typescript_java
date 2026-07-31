@@ -3,7 +3,7 @@
  *
  * This is the only way in: the standard library is reachable through `Java.*` and nowhere else. Nothing here
  * wraps anything, so no name costs an indirection. A namespace is what lets these be Java's own — `Object`,
- * `Map`, `Set`, `List` and `Iterator` would otherwise collide with JavaScript's globals at the use site:
+ * `JavaMap`, `JavaSet`, `List` and `JavaIterator` would otherwise collide with JavaScript's globals at the use site:
  *
  * ```ts
  * import { Java } from "typescript-java";
@@ -13,12 +13,13 @@
  * Java.Collections.sort(names);
  * ```
  *
- * The classes are declared under these same names, so nothing is renamed on the way through. Where a class
- * shadows the global it is built on — `collections/Map.ts` stores its buckets in a real `Map` — the module
- * reaches that global through `globalThis` rather than taking a different name for itself.
+ * Five declarations carry a `Java` prefix and are renamed here: `JavaObject`, `JavaMap`, `JavaSet`,
+ * `JavaIterator` and `JavaListIterator`. Those are the names with a JavaScript global behind them, and a class
+ * declared under one would shadow, inside its own module, the global it is built on — `collections/Map.ts`
+ * stores its buckets in a real `Map`. TypeScript refuses `class Object` outright besides (TS2725).
  *
- * The one exception is {@link Object}, declared `_Object` because TypeScript refuses a class named `Object`
- * (TS2725). It is renamed here, and only it.
+ * Nothing else is renamed. `List`, `Collection`, `AbstractSet`, `AbstractMap`, `MapEntry` and `Throwable` have
+ * no global to collide with, so they are declared under Java's own names and pass straight through.
  *
  * WHAT IS NOT HERE: anything without a `java.lang`, `java.util` or `java.io` counterpart. The serialization
  * layers model Jackson and JAXB rather than the standard library, and stay at the top level along with
@@ -32,7 +33,7 @@
 // java.lang
 // ---------------------------------------------------------------------------------------------------------
 
-export { _Object as Object } from "../fundamentals/Object.js";
+export { JavaObject as Object } from "../fundamentals/Object.js";
 export type { Comparable } from "../fundamentals/Comparable.js";
 /** No Java counterpart: the constraint `<T extends Comparable<? super T>>` states inline, named so it can be reused. */
 export type { NaturallyOrdered } from "../fundamentals/Comparable.js";
@@ -46,14 +47,14 @@ export { Optional } from "../fundamentals/Optional.js";
 export { Collection } from "../collections/Collection.js";
 export { AbstractSet } from "../collections/Collection.js";
 export { AbstractMap } from "../collections/AbstractMap.js";
-/** Java spells this `Map.Entry`; a nested name would mean making it a static of {@link Map}, which it is not. */
+/** Java spells this `Map.Entry`; a nested name would mean making it a static of {@link JavaMap}, which it is not. */
 export { MapEntry } from "../collections/AbstractMap.js";
 export { List } from "../collections/List.js";
-export { Set } from "../collections/Set.js";
-export { Map } from "../collections/Map.js";
+export { JavaSet as Set } from "../collections/Set.js";
+export { JavaMap as Map } from "../collections/Map.js";
 export { TreeMap } from "../collections/TreeMap.js";
 export { TreeSet } from "../collections/TreeSet.js";
-export type { Iterator, ListIterator } from "../collections/Iterator.js";
+export type { JavaIterator as Iterator, JavaListIterator as ListIterator } from "../collections/Iterator.js";
 
 /** Both the `Comparator<T>` type and its statics, merged under one name. See {@link ./Comparator.js}. */
 export { Comparator } from "./Comparator.js";

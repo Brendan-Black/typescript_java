@@ -1,9 +1,9 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { equalsOf, hashAll, hashCodeOf } from "../src/fundamentals/Hashing.js";
-import { boilerplateEqualityCheck, _Object } from "../src/fundamentals/Object.js";
+import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
 
-class Point extends _Object {
+class Point extends JavaObject {
   constructor(public readonly x: number, public readonly y: number) {
     super();
   }
@@ -115,7 +115,7 @@ describe("equalsOf", () => {
     assert.equal(equalsOf(null, null), true);
   });
 
-  it("treats NaN as equal to itself, as JS Map and Set do", () => {
+  it("treats NaN as equal to itself, as JS JavaMap and JavaSet do", () => {
     assert.equal(equalsOf(NaN, NaN), true);
   });
 

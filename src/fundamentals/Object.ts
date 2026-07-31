@@ -1,13 +1,16 @@
 /**
  * Java's Object class, exported as {@link Java.Object}.
  *
- * The underscore is forced: TypeScript refuses a class declaration named `Object` outright (TS2725), whatever
- * the module does about the global. Every other class in this library is declared under Java's own name and
- * reaches the global it shadows through `globalThis`; this one cannot be, so it is spelled `_Object` here and
- * renamed once, at the namespace boundary. `constructor.name` is `"_Object"` in consequence, which shows only
- * for a direct instance — every subclass prints its own name, which is what `toString()` is for.
+ * The `Java` prefix is here because `Object` is a JavaScript global: a class declared under that name would
+ * shadow, inside this module, the `Object.getPrototypeOf` that {@link boilerplateEqualityCheck} depends on.
+ * TypeScript refuses the declaration outright in any case (TS2725). The prefix is dropped at the namespace
+ * boundary, where a qualifier does the disambiguating instead — see `java/index.ts`.
+ *
+ * Only the names that actually collide carry it: {@link JavaMap}, {@link JavaSet} and {@link JavaIterator} for
+ * the same reason, while `List`, `Collection`, `AbstractMap`, `MapEntry` and `Throwable` have no global to
+ * collide with and are declared plainly.
  */
-export abstract class _Object {
+export abstract class JavaObject {
   #hash: number;
   /**
    * Initializes a unique hash code for the object.
@@ -26,7 +29,7 @@ export abstract class _Object {
    *
    * `>>> 0` before the hex because `Integer.toHexString` reinterprets the bits as unsigned: Java prints
    * `ffffe0bb` for -8005, where a bare `(-8005).toString(16)` gives `-1f45`. The inherited hash is always
-   * non-negative so this never fires on `_Object` itself, but an override deriving from fields (anything
+   * non-negative so this never fires on `JavaObject` itself, but an override deriving from fields (anything
    * built on `hashAll`) is free to go negative, and that is exactly the case this method claims to reflect.
    *
    * The class name is the short one — `getClass().getName()` is fully qualified and JavaScript has no package
@@ -73,7 +76,7 @@ export abstract class _Object {
   }
 
   /**
-   * `instanceof _Object`, but proof against a forgery.
+   * `instanceof JavaObject`, but proof against a forgery.
    *
    * `Object.create(SomeSubclass.prototype)` satisfies `instanceof` while never having run a constructor, so it
    * carries no private state and any method that reads a field throws a TypeError off it. Checking for `#hash`
@@ -82,8 +85,8 @@ export abstract class _Object {
    * Use this before calling methods on an object you were handed — an `equals` implementation, in particular,
    * is required to answer rather than throw.
    */
-  public static isInstance(value: unknown): value is _Object {
-    return value instanceof _Object && #hash in value;
+  public static isInstance(value: unknown): value is JavaObject {
+    return value instanceof JavaObject && #hash in value;
   }
 
 }
@@ -104,7 +107,7 @@ export abstract class _Object {
  * @param callback an optional callback that can be used to provide custom equality logic
  * @returns `true` if the objects are "equal", `false` otherwise
  */
-export function boilerplateEqualityCheck<T extends _Object>({ obj1, obj2 }: { obj1: _Object; obj2: unknown }, callback?: (o1: T, o2: T) => boolean): boolean {
+export function boilerplateEqualityCheck<T extends JavaObject>({ obj1, obj2 }: { obj1: JavaObject; obj2: unknown }, callback?: (o1: T, o2: T) => boolean): boolean {
   if (obj1 === obj2) {
     return true;
   }
@@ -116,17 +119,17 @@ export function boilerplateEqualityCheck<T extends _Object>({ obj1, obj2 }: { ob
   // unrelated classes can both become `t` and would then compare as the same type.
   //
   // `isInstance` rather than a bare `instanceof`, because the former also turns away a
-  // prototype-only forgery like `Object.create(_Object.prototype)`, which never ran a constructor and so has
+  // prototype-only forgery like `Object.create(JavaObject.prototype)`, which never ran a constructor and so has
   // no `#hash`.
   //
   // What still gets through is a forgery that ran *this* constructor while wearing a subclass's prototype:
   /*
-	  const fake = Reflect.construct(_Object, [], Optional);
+	  const fake = Reflect.construct(JavaObject, [], Optional);
 	 */
   // `#hash` is installed and the prototype matches, so both checks below pass — but `#value` was never
   // installed, and a callback reading it throws a TypeError. Callbacks that touch subclass private state must
   // brand-check first — see Optional#equals.
-  if (!_Object.isInstance(obj2) || Object.getPrototypeOf(obj1) !== Object.getPrototypeOf(obj2)) {
+  if (!JavaObject.isInstance(obj2) || Object.getPrototypeOf(obj1) !== Object.getPrototypeOf(obj2)) {
     return false;
   }
   // NOTE: deliberately no `hashCode()` comparison. Hash codes here are identity-based, so gating on them

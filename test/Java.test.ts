@@ -5,13 +5,13 @@ import * as root from "../src/index.js";
 import { AbstractMap, MapEntry } from "../src/collections/AbstractMap.js";
 import { binarySearch, sort } from "../src/collections/Collections.js";
 import { List } from "../src/collections/List.js";
-import { Map } from "../src/collections/Map.js";
-import { Set } from "../src/collections/Set.js";
+import { JavaMap } from "../src/collections/Map.js";
+import { JavaSet } from "../src/collections/Set.js";
 import { TreeMap } from "../src/collections/TreeMap.js";
 import { compareOf } from "../src/fundamentals/Comparable.js";
 import { comparator, naturalOrder } from "../src/fundamentals/Comparator.js";
 import { equalsOf, hashAll, hashCodeOf } from "../src/fundamentals/Hashing.js";
-import { _Object } from "../src/fundamentals/Object.js";
+import { JavaObject } from "../src/fundamentals/Object.js";
 import { requireNonNull } from "../src/fundamentals/Objects.js";
 import { Optional } from "../src/fundamentals/Optional.js";
 import { Throwable } from "../src/exceptions/Throwable.js";
@@ -19,14 +19,14 @@ import { Throwable } from "../src/exceptions/Throwable.js";
 /**
  * The namespace re-exports its bindings rather than wrapping them, so every one of these is an identity check
  * rather than a behavioural one. If they hold, `Java.X` cannot drift from the class the module declares: there
- * is only one of it. The classes are declared under Java's own names too, reaching any global they shadow
- * through `globalThis` — `_Object` alone is spelled differently, because TypeScript refuses `class Object`.
+ * is only one of it. The five names with a JavaScript global behind them are declared prefixed and renamed at
+ * the boundary; the rest have nothing to collide with and are declared under Java's own names.
  */
 describe("Java namespace identity", () => {
   it("names the declared class itself, not a copy of it", () => {
-    assert.equal(Java.Object, _Object);
-    assert.equal(Java.Map, Map);
-    assert.equal(Java.Set, Set);
+    assert.equal(Java.Object, JavaObject);
+    assert.equal(Java.Map, JavaMap);
+    assert.equal(Java.Set, JavaSet);
     assert.equal(Java.List, List);
     assert.equal(Java.AbstractMap, AbstractMap);
     assert.equal(Java.MapEntry, MapEntry);
@@ -42,12 +42,14 @@ describe("Java namespace identity", () => {
     assert.ok(map instanceof Java.Object);
   });
 
-  it("carries Java's own name through to constructor.name", () => {
-    // the declaration is `class Map`, so this is the name toString() and a stack trace both show
-    assert.equal(Java.Map.name, "Map");
+  it("shows the declaration name in constructor.name, prefix and all", () => {
+    // a colliding name is declared prefixed, so that is what toString() and a stack trace both show
+    assert.equal(Java.Map.name, "JavaMap");
+    assert.equal(Java.Set.name, "JavaSet");
+    assert.equal(Java.Object.name, "JavaObject");
+    // one with no global behind it is declared plainly, and reads as Java's own
     assert.equal(Java.List.name, "List");
-    // except the one the compiler will not allow to be named `Object`
-    assert.equal(Java.Object.name, "_Object");
+    assert.equal(Java.TreeMap.name, "TreeMap");
     assert.match(new Java.Map<string, number>().toString(), /^\{\}$/);
     assert.match(new (class Point extends Java.Object {})().toString(), /^Point@[0-9a-f]+$/);
   });
@@ -195,8 +197,8 @@ describe("Java namespace surface", () => {
   it("reaches the standard library only through Java.*", () => {
     // nothing with a Java counterpart is a top-level export; the namespace is the only way in
     const removed = [
-      "_Object", "Collection", "AbstractSet", "AbstractMap", "MapEntry", "List",
-      "Map", "Set", "TreeMap", "TreeSet", "Optional", "Throwable", "RuntimeException",
+      "JavaObject", "Collection", "AbstractSet", "AbstractMap", "MapEntry", "List",
+      "JavaMap", "JavaSet", "TreeMap", "TreeSet", "Optional", "Throwable", "RuntimeException",
       "ClassCastException", "ConcurrentModificationException", "IllegalArgumentException",
       "IllegalStateException", "IndexOutOfBoundsException", "NoSuchElementException",
       "NotImplementedException", "NullPointerException", "UnsupportedOperationException",

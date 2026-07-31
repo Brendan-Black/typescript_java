@@ -4,7 +4,7 @@ import { List } from "../src/collections/List.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { XmlBindException } from "../src/exceptions/XmlBindException.js";
 import { XmlParseException } from "../src/exceptions/XmlParseException.js";
-import { boilerplateEqualityCheck, _Object } from "../src/fundamentals/Object.js";
+import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
 import { hashAll } from "../src/fundamentals/Hashing.js";
 import { Optional } from "../src/fundamentals/Optional.js";
 import { parseXml, XmlElement } from "../src/serialization/XmlParser.js";
@@ -230,7 +230,7 @@ describe("XmlReader elements", () => {
   });
 
   it("builds a class through mappingElement rather than knowing about constructors", () => {
-    class Point extends _Object {
+    class Point extends JavaObject {
       constructor(
         public readonly x: number,
         public readonly y: number,

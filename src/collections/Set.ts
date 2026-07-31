@@ -1,45 +1,45 @@
 import { AbstractSet, unsupported } from "./Collection.js";
-import { type Iterator, mapIterator } from "./Iterator.js";
-import { Map } from "./Map.js";
+import { type JavaIterator, mapIterator } from "./Iterator.js";
+import { JavaMap } from "./Map.js";
 
 /**
  * Java's `HashSet`, keyed on `hashCode()` and `equals()` rather than on reference identity.
  *
  * Where JavaScript's `Set` would hold two structurally equal objects as two separate members, this holds one.
- * Everything said about keys in {@link Map} applies here to elements — including the warning that an
+ * Everything said about keys in {@link JavaMap} applies here to elements — including the warning that an
  * `equals` override without a matching `hashCode` override will lose the element.
  *
- * Backed by a {@link Map}, exactly as Java's `HashSet` is backed by a `HashMap`, so iteration is likewise
+ * Backed by a {@link JavaMap}, exactly as Java's `HashSet` is backed by a `HashMap`, so iteration is likewise
  * in insertion order and likewise fail-fast.
  *
  * The bulk operations, `toArray`, `forEach`, `toString`, `equals` and `hashCode` all come from
  * {@link AbstractSet}; only the six primitives are implemented here.
  */
-export class Set<T> extends AbstractSet<T> {
+export class JavaSet<T> extends AbstractSet<T> {
   /** the value is a placeholder; only the key carries meaning, as in Java's `HashSet.PRESENT` */
-  #map: Map<T, boolean>;
+  #map: JavaMap<T, boolean>;
   #readOnly = false;
 
   /**
-   * @param values initial contents. Accepts anything iterable, including another Set, an array, or a plain
+   * @param values initial contents. Accepts anything iterable, including another JavaSet, an array, or a plain
    * JavaScript `Set`. Duplicates — by `equals`, not by reference — collapse into one member.
    */
   constructor(values?: Iterable<T>) {
     super();
-    this.#map = new Map<T, boolean>();
+    this.#map = new JavaMap<T, boolean>();
     if (values) {
       this.addAll(values);
     }
   }
 
   /**
-   * Java 9's `Set.of(...)`: an immutable set, refusing every mutator.
+   * Java 9's `JavaSet.of(...)`: an immutable set, refusing every mutator.
    *
    * A frozen copy rather than a view. Java's `Set.of` additionally rejects duplicate arguments outright; this
    * follows the constructor instead and collapses them, which is the less surprising of the two.
    */
-  public static of<T>(...values: readonly T[]): Set<T> {
-    const set = new Set<T>(values);
+  public static of<T>(...values: readonly T[]): JavaSet<T> {
+    const set = new JavaSet<T>(values);
     set.#readOnly = true;
     return set;
   }
@@ -48,10 +48,10 @@ export class Set<T> extends AbstractSet<T> {
    * Java's `Collections.unmodifiableSet`: a read-only *view*, not a copy.
    *
    * The view shares the original's storage, so later changes to the original show through — see
-   * {@link Map.unmodifiable} for why that is worth knowing before you hand one out.
+   * {@link JavaMap.unmodifiable} for why that is worth knowing before you hand one out.
    */
-  public static unmodifiable<T>(set: Set<T>): Set<T> {
-    const view = new Set<T>();
+  public static unmodifiable<T>(set: JavaSet<T>): JavaSet<T> {
+    const view = new JavaSet<T>();
     view.#map = set.#map;
     view.#readOnly = true;
     return view;
@@ -97,7 +97,7 @@ export class Set<T> extends AbstractSet<T> {
    */
   public override retainAll(values: Iterable<T>): boolean {
     this.#requireMutable("retainAll");
-    const keep = values instanceof Set ? (values as Set<T>) : new Set<T>(values);
+    const keep = values instanceof JavaSet ? (values as JavaSet<T>) : new JavaSet<T>(values);
     // snapshot first: this removes from the very set it is scanning
     const doomed = this.toArray().filter((value) => !keep.contains(value));
     for (const value of doomed) {
@@ -115,7 +115,7 @@ export class Set<T> extends AbstractSet<T> {
    * {@link of} marks this set unmodifiable without touching the map underneath it, which is free to be shared
    * with something mutable.
    */
-  public iterator(): Iterator<T> {
+  public iterator(): JavaIterator<T> {
     return mapIterator(
       this.#map.entryIterator(),
       (entry) => entry.getKey(),

@@ -1,8 +1,8 @@
 import { List } from "../collections/List.js";
-import { Map } from "../collections/Map.js";
+import { JavaMap } from "../collections/Map.js";
 import { XmlParseException } from "../exceptions/XmlParseException.js";
 import { hashAll } from "../fundamentals/Hashing.js";
-import { boilerplateEqualityCheck, _Object } from "../fundamentals/Object.js";
+import { boilerplateEqualityCheck, JavaObject } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
 
 /**
@@ -25,9 +25,9 @@ import { Optional } from "../fundamentals/Optional.js";
  * and {@link getLocalName} is there for a caller who wants to match without the prefix. Resolving prefixes to
  * URIs is a separate job that no document this parser is aimed at needs done for it.
  */
-export class XmlElement extends _Object {
+export class XmlElement extends JavaObject {
   readonly #name: string;
-  readonly #attributes: Map<string, string>;
+  readonly #attributes: JavaMap<string, string>;
   readonly #children: List<XmlElement>;
   readonly #text: string;
 
@@ -45,7 +45,7 @@ export class XmlElement extends _Object {
   ) {
     super();
     this.#name = name;
-    this.#attributes = new Map<string, string>(attributes);
+    this.#attributes = new JavaMap<string, string>(attributes);
     this.#children = new List<XmlElement>(children);
     this.#text = text;
   }
@@ -73,8 +73,8 @@ export class XmlElement extends _Object {
   }
 
   /** Every attribute, in document order. Unmodifiable: an element is a record of what was parsed. */
-  public getAttributes(): Map<string, string> {
-    return Map.unmodifiable(this.#attributes);
+  public getAttributes(): JavaMap<string, string> {
+    return JavaMap.unmodifiable(this.#attributes);
   }
 
   /** The elements directly inside this one, in document order. Unmodifiable, for the same reason. */
@@ -195,7 +195,7 @@ export class XmlElement extends _Object {
 }
 
 /** The five entities XML defines without a DTD. Everything else needs a declaration this parser cannot read. */
-const NAMED_ENTITIES: ReadonlyMap<string, string> = new globalThis.Map<string, string>([
+const NAMED_ENTITIES: ReadonlyMap<string, string> = new Map<string, string>([
   ["amp", "&"],
   ["lt", "<"],
   ["gt", ">"],

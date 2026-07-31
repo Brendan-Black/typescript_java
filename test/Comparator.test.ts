@@ -14,9 +14,9 @@ import {
   reverseOrder,
   type Comparator,
 } from "../src/fundamentals/Comparator.js";
-import { _Object } from "../src/fundamentals/Object.js";
+import { JavaObject } from "../src/fundamentals/Object.js";
 
-class Money extends _Object implements Comparable<Money> {
+class Money extends JavaObject implements Comparable<Money> {
   constructor(public readonly cents: number) {
     super();
   }

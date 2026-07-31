@@ -1,4 +1,4 @@
-import { _Object } from "./Object.js";
+import { JavaObject } from "./Object.js";
 
 /**
  * Runtime detection of the two ways a key class quietly breaks a hash-based collection.
@@ -55,18 +55,18 @@ function ownerOf(start: object | null, key: string): object | null {
 }
 
 /**
- * Whether a value's class overrides `equals` but leaves `hashCode` as {@link _Object}'s identity-based
+ * Whether a value's class overrides `equals` but leaves `hashCode` as {@link JavaObject}'s identity-based
  * default — the combination that makes a key unfindable.
  *
  * Overriding both, or neither, is fine. Overriding only `hashCode` is odd but harmless: it can cost a lookup
  * some speed, never a result.
  */
 export function overridesEqualsWithoutHashCode(value: unknown): boolean {
-  if (!(value instanceof _Object)) {
+  if (!(value instanceof JavaObject)) {
     return false;
   }
   const proto = Object.getPrototypeOf(value);
-  return ownerOf(proto, "equals") !== _Object.prototype && ownerOf(proto, "hashCode") === _Object.prototype;
+  return ownerOf(proto, "equals") !== JavaObject.prototype && ownerOf(proto, "hashCode") === JavaObject.prototype;
 }
 
 /**
@@ -76,7 +76,7 @@ export function overridesEqualsWithoutHashCode(value: unknown): boolean {
  * once per class and is then remembered, so the steady-state cost is a single WeakSet lookup.
  */
 export function checkHashContract(key: unknown): void {
-  if (!enabled || !(key instanceof _Object)) {
+  if (!enabled || !(key instanceof JavaObject)) {
     return;
   }
   const proto = Object.getPrototypeOf(key);
@@ -109,7 +109,7 @@ export function checkHashContract(key: unknown): void {
  * rather than a workaround.
  */
 export function checkCollisionChain(chainLength: number, key: unknown): void {
-  if (!enabled || chainLength <= LONG_CHAIN_THRESHOLD || !(key instanceof _Object)) {
+  if (!enabled || chainLength <= LONG_CHAIN_THRESHOLD || !(key instanceof JavaObject)) {
     return;
   }
   const proto = Object.getPrototypeOf(key);

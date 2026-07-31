@@ -2,10 +2,10 @@ import { ConcurrentModificationException } from "../exceptions/ConcurrentModific
 import { IndexOutOfBoundsException } from "../exceptions/IndexOutOfBoundsException.js";
 import { equalsOf, hashCodeOf } from "../fundamentals/Hashing.js";
 import { elementAt } from "../fundamentals/Indexing.js";
-import { _Object } from "../fundamentals/Object.js";
+import { JavaObject } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
 import { Collection, unsupported } from "./Collection.js";
-import { type Iterator, type ListIterator, listIteratorOver } from "./Iterator.js";
+import { type JavaIterator, type JavaListIterator, listIteratorOver } from "./Iterator.js";
 
 /**
  * The mutable innards, held behind one reference so an unmodifiable view can share them and stay live.
@@ -35,7 +35,7 @@ export class List<T> extends Collection<T> {
 
   /**
    * @param values initial contents, in order. Accepts anything iterable — an array, another List, a
-   * Set, a plain JavaScript Set.
+   * JavaSet, a plain JavaScript Set.
    */
   constructor(values?: Iterable<T>) {
     super();
@@ -260,18 +260,18 @@ export class List<T> extends Collection<T> {
    * the same machinery as reading it both. Removal is by position, so a list holding two `equals` elements loses
    * the one the cursor is standing on, where {@link removeIf} can only ask for a value and gets the first match.
    */
-  public override iterator(): Iterator<T> {
+  public override iterator(): JavaIterator<T> {
     return this.listIterator();
   }
 
   /**
-   * Java's `List.listIterator()`: a cursor that also runs backwards and can write. See {@link ListIterator}.
+   * Java's `List.listIterator()`: a cursor that also runs backwards and can write. See {@link JavaListIterator}.
    *
    * @param index where to start, between elements — `0` at the front, {@link size} at the back, ready to walk
    * the list in reverse. Defaults to the front.
    * @throws {@link IndexOutOfBoundsException} unless `0 <= index <= size`
    */
-  public listIterator(index: number = 0): ListIterator<T> {
+  public listIterator(index: number = 0): JavaListIterator<T> {
     if (!Number.isInteger(index) || index < 0 || index > this.#state.items.length) {
       throw new IndexOutOfBoundsException(`Index ${index} out of bounds for length ${this.#state.items.length}`);
     }
@@ -305,7 +305,7 @@ export class List<T> extends Collection<T> {
     if (this === other) {
       return true;
     }
-    if (!_Object.isInstance(other) || !(other instanceof List)) {
+    if (!JavaObject.isInstance(other) || !(other instanceof List)) {
       return false;
     }
     const otherList = other as List<T>;

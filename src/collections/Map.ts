@@ -23,11 +23,11 @@ interface Node<K, V> {
 
 /**
  * The mutable innards, held behind one reference so an unmodifiable view can share them and stay live.
- * See {@link Map.unmodifiable}.
+ * See {@link JavaMap.unmodifiable}.
  */
 interface MapState<K, V> {
-  /** hash code -> the nodes that landed on it. A JS Map, so any integer works as a bucket index. */
-  buckets: globalThis.Map<number, Node<K, V>[]>;
+  /** hash code -> the nodes that landed on it. A JS JavaMap, so any integer works as a bucket index. */
+  buckets: Map<number, Node<K, V>[]>;
   head: Node<K, V> | null;
   tail: Node<K, V> | null;
   size: number;
@@ -42,11 +42,11 @@ interface MapState<K, V> {
  * Java's `HashMap`, keyed on `hashCode()` and `equals()` rather than on reference identity.
  *
  * This is the thing JavaScript's built-in `Map` cannot do. `new Map()` compares keys with SameValueZero, so two
- * structurally equal objects are two different keys and the second one can never find the first. A `Map`
+ * structurally equal objects are two different keys and the second one can never find the first. A `JavaMap`
  * buckets by {@link hashCodeOf} and resolves collisions with {@link equalsOf}, which means a value type that
  * overrides `equals`/`hashCode` behaves as a key exactly the way it would on the JVM.
  *
- * Keys may be anything: strings, numbers, `null`, or {@link _Object} instances. See {@link hashCodeOf} for
+ * Keys may be anything: strings, numbers, `null`, or {@link JavaObject} instances. See {@link hashCodeOf} for
  * how each kind is hashed.
  *
  * Iteration is in insertion order, which makes it Java's `LinkedHashMap` rather than its `HashMap` — `HashMap`
@@ -58,28 +58,22 @@ interface MapState<K, V> {
  * three collection views, `equals`, `hashCode`, `toString` — comes from {@link AbstractMap}.
  *
  * IMPORTANT: as in Java, a key whose `hashCode()` disagrees with its `equals()` will be lost in the map. If you
- * override `equals` on an {@link _Object}, you must override `hashCode` too — `hashAll` exists to make that a
+ * override `equals` on an {@link JavaObject}, you must override `hashCode` too — `hashAll` exists to make that a
  * one-liner, and the map warns once per class when it spots the mistake. Mutating a key after inserting it
  * moves its hash out from under the map, with the same result. {@link TreeMap} is the alternative when the key
  * type has an order but no trustworthy hash.
  */
-export class Map<K, V> extends AbstractMap<K, V> {
+export class JavaMap<K, V> extends AbstractMap<K, V> {
   #state: MapState<K, V>;
   #readOnly = false;
 
   /**
    * @param entries initial contents, as `[key, value]` pairs. Accepts anything iterable, including another
-   * Map (which iterates as pairs) and a plain JavaScript `Map`. Later pairs win over earlier ones.
+   * JavaMap (which iterates as pairs) and a plain JavaScript `Map`. Later pairs win over earlier ones.
    */
   constructor(entries?: Iterable<readonly [K, V]>) {
     super();
-    this.#state = {
-      buckets: new globalThis.Map<number, Node<K, V>[]>(),
-      head: null,
-      tail: null,
-      size: 0,
-      modCount: 0,
-    };
+    this.#state = { buckets: new Map<number, Node<K, V>[]>(), head: null, tail: null, size: 0, modCount: 0 };
     if (entries) {
       for (const [key, value] of entries) {
         this.put(key, value);
@@ -88,13 +82,13 @@ export class Map<K, V> extends AbstractMap<K, V> {
   }
 
   /**
-   * Java 9's `Map.of(...)`: an immutable map, refusing every mutator.
+   * Java 9's `JavaMap.of(...)`: an immutable map, refusing every mutator.
    *
    * A frozen copy rather than a view — the arguments are values, so there is nothing to stay live against.
    * Java's variadic form takes alternating keys and values, which TypeScript cannot type; these are pairs.
    */
-  public static of<K, V>(...entries: readonly (readonly [K, V])[]): Map<K, V> {
-    const map = new Map<K, V>(entries);
+  public static of<K, V>(...entries: readonly (readonly [K, V])[]): JavaMap<K, V> {
+    const map = new JavaMap<K, V>(entries);
     map.#readOnly = true;
     return map;
   }
@@ -104,11 +98,11 @@ export class Map<K, V> extends AbstractMap<K, V> {
    *
    * The view shares the original's storage, so later changes to the original show through. That is Java's
    * behaviour and the usual source of surprise with it: handing out an unmodifiable view protects you from
-   * your caller, not your caller from you. Use {@link Map.of} or the copy constructor when you want a
+   * your caller, not your caller from you. Use {@link JavaMap.of} or the copy constructor when you want a
    * snapshot nobody can move.
    */
-  public static unmodifiable<K, V>(map: Map<K, V>): Map<K, V> {
-    const view = new Map<K, V>();
+  public static unmodifiable<K, V>(map: JavaMap<K, V>): JavaMap<K, V> {
+    const view = new JavaMap<K, V>();
     view.#state = map.#state;
     view.#readOnly = true;
     return view;
@@ -234,7 +228,7 @@ export class Map<K, V> extends AbstractMap<K, V> {
       return null;
     }
     for (let i = 0; i < bucket.length; i++) {
-      const node = elementAt(bucket, i, "Map.remove");
+      const node = elementAt(bucket, i, "JavaMap.remove");
       if (!equalsOf(key, node.key)) {
         continue;
       }
