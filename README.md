@@ -90,15 +90,16 @@ carries `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap` and the factorie
 which is what allows one name to carry both.
 
 **What is not in the namespace:** anything without a `java.lang`, `java.util` or `java.io` counterpart. The
-`JsonReader`, `XmlReader` and `XmlWriter` layers model Jackson and JAXB rather than the standard library, so they
-keep their top-level exports along with `JsonBindException`, `XmlBindException` and `XmlParseException`; so do
+`JsonReader`, `JsonWriter`, `XmlReader` and `XmlWriter` layers model Jackson and JAXB rather than the standard
+library, so they keep their top-level exports along with `JsonBindException`, `XmlBindException` and
+`XmlParseException`; so do
 `boilerplateEqualityCheck` and the `Contracts` module, which are this library's own tooling. `Java.*` is the
 standard library and nothing else.
 
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (710 tests); the serialization layer covers both directions of a JSON wire
+hierarchy are complete and tested (740 tests); the serialization layer covers both directions of a JSON wire
 contract and both of an XML one, parser and all. See [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -136,6 +137,7 @@ Outside the namespace — no `java.*` counterpart, so these are the package's to
 | `fundamentals/Contracts` | `setHashContractChecks`, `hashContractChecksEnabled`, `overridesEqualsWithoutHashCode` |
 | `exceptions` | `JsonBindException`, `XmlBindException`, `XmlParseException` |
 | `serialization/JsonReader` | `JsonReader`, `JsonFields`, `readJson`, `objectOf`, `listOf`, `setOf`, `mapOf`, `objectAsMap`, `treeSetOf`, `treeMapOf`, `entryOf`, `arrayOf`, `stringValue`, `numberValue`, `integerValue`, `booleanValue`, `unknownValue`, `enumOf`, `nullable`, `optionalValue`, `withDefault`, `mapping` |
+| `serialization/JsonWriter` | `JsonWriter`, `JsonProperties`, `JsonValue`, `writeJson`, `objectFrom`, `arrayFrom`, `mapFrom`, `mapAsObject`, `entryFrom`, `stringAsJson`, `numberAsJson`, `integerAsJson`, `booleanAsJson`, `rawJson`, `nullableAsJson`, `optionalAsJson`, `mappingAsJson` |
 | `serialization/XmlParser` | `parseXml`, `XmlElement`, `isXmlName` |
 | `serialization/XmlReader` | `XmlReader`, `XmlTextReader`, `XmlField`, `XmlFields`, `readXml`, `elementOf`, `elementNamed`, `textElement`, `mappingElement`, `attribute`, `optionalAttribute`, `textContent`, `child`, `optionalChild`, `childText`, `children`, `wrappedChildren`, `stringText`, `rawText`, `numberText`, `integerText`, `booleanText`, `enumText`, `mappingText` |
 | `serialization/XmlWriter` | `XmlWriter`, `XmlTextWriter`, `XmlPart`, `XmlParts`, `XmlDraft`, `XmlFormat`, `writeXml`, `elementFrom`, `textElementFrom`, `mappingElementFrom`, `intoAttribute`, `intoOptionalAttribute`, `intoText`, `intoChild`, `intoOptionalChild`, `intoChildText`, `intoChildren`, `intoWrappedChildren`, `stringAsText`, `numberAsText`, `integerAsText`, `booleanAsText`, `mappingAsText` |
@@ -464,6 +466,53 @@ for a `Map<String, V>`. `mapping` is the hinge onto your own types:
 const point = mapping(objectOf({ x: numberValue, y: numberValue }), ({ x, y }) => new Point(x, y));
 ```
 
+#### Writing it out
+
+`Serializable` already writes this library's own types, but `toJSON` belongs to the *value* rather than to the
+contract, and there are three things it therefore cannot do. It cannot write a type it was not built into — the
+`mapping` above reads `{x, y}` into a `Point`, and a `Point` has no `toJSON` to send one back with. It cannot
+spell a field differently from the property behind it. And it cannot refuse anything, because by the time it runs
+the encoding is already decided.
+
+That last one is the one that costs, because `JSON.stringify` fails quietly in exactly the two places a wire
+contract can least afford it: `undefined` in a field drops the key, and `NaN` and the infinities become `null`.
+Both produce a document that parses. A `JsonWriter<T>` refuses both and names the slot:
+
+```ts
+const order = objectFrom<Order>({
+  id: integerAsJson,
+  status: stringAsJson,
+  lines: arrayFrom(stringAsJson),
+  note: optionalAsJson(stringAsJson),
+});
+
+writeJson(value, order);        // {"id":1,"status":"PENDING","lines":["a"],"note":null}
+writeJson(value, order, "  ");  // the same document, indented
+```
+
+```
+$.total: NaN cannot be written as a number
+```
+
+The contract reads line for line like the one that parses it, and every writer produces the shape the matching
+reader reads, so the two are inverses: what `writeJson` sends, `readJson` reads back as an equal value. Where
+the reading side has four names for a JSON array — `arrayOf`, `listOf`, `setOf`, `treeSetOf`, which differ only
+in what they build out of one — writing has `arrayFrom` alone, because a `Java.List`, a `Java.Set`, a
+`Java.TreeSet` and a plain array all leave the same array behind them. `mapFrom` writes the pair form and
+`mapAsObject` the object form, matching `mapOf` and `objectAsMap`. There is no counterpart to `enumOf`: a
+`"PENDING" | "SHIPPED"` *is* a `string` and writes as one, which is the same call `stringAsText` makes on the
+XML side.
+
+Two asymmetries are deliberate. A property that is absent at runtime is refused rather than written, mirroring a
+missing key being refused on the way in — that is the case where a `T` can lie, and `JSON.stringify` would drop
+the key and leave the reader at the far end to complain about it. And `integerAsJson` refuses an integer larger
+than JavaScript was holding exactly, where `integerValue` accepts one: a reader has to take the number the
+document contains, but a writer still has the original, and `9007199254740993` written out arrives as
+`...992` — a number the receiver reads back happily, and not the one that was sent.
+
+For the tree rather than the text of it — to nest a contract's output inside a document being assembled by hand
+— call `order.write(value)` and keep the `JsonValue`.
+
 ### XML
 
 Java services still speak XML — SOAP endpoints, JAXB-annotated beans, configuration a `web.xml` away from being
@@ -590,14 +639,15 @@ together, because breaking either apart would change what reads back out.
 | `Comparator.of` | does not exist | lifts a plain `(a, b) => number` | Java does not need one: there a lambda already *is* a `Comparator` and the compiler supplies the default methods |
 
 Additions with no Java counterpart: `Java.Map.find` / `Java.List.find` (returning `Java.Optional`), the whole
-`Contracts` module, `Java.NotImplementedException`, and the `JsonReader`, `XmlReader` and `XmlWriter` layers —
-Java's own binding lives in Jackson and JAXB rather than in the standard library, and the layers here follow their
-decisions where one has been made.
+`Contracts` module, `Java.NotImplementedException`, and the `JsonReader`, `JsonWriter`, `XmlReader` and
+`XmlWriter` layers — Java's own binding lives in Jackson and JAXB rather than in the standard library, and the
+layers here follow their decisions where one has been made.
 
 ## Roadmap
 
-- **Framework-specific wire support** (Spring/Jackson/raw Tomcat). The JSON contract is symmetric now —
-  `Serializable` out, `JsonReader` in — but nothing here knows about a particular backend's conventions:
+- **Framework-specific wire support** (Spring/Jackson/raw Tomcat). Both wire contracts are symmetric now —
+  `JsonWriter` and `JsonReader`, `XmlWriter` and `XmlReader` — but nothing here knows about a particular
+  backend's conventions:
   Spring's error envelope, Jackson's polymorphic `@JsonTypeInfo` discriminators, or the date and `BigDecimal`
   encodings a Java service picks by configuration rather than by type.
 - **XML Schema and namespace resolution.** The XML layers bind a document to a DTO in both directions, but

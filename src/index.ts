@@ -54,6 +54,23 @@ export {
   unknownValue,
   withDefault,
 } from "./serialization/JsonReader.js";
+export type { JsonProperties, JsonValue, JsonWriter } from "./serialization/JsonWriter.js";
+export {
+  arrayFrom,
+  booleanAsJson,
+  entryFrom,
+  integerAsJson,
+  mapAsObject,
+  mapFrom,
+  mappingAsJson,
+  nullableAsJson,
+  numberAsJson,
+  objectFrom,
+  optionalAsJson,
+  rawJson,
+  stringAsJson,
+  writeJson,
+} from "./serialization/JsonWriter.js";
 export { XmlElement, isXmlName, parseXml } from "./serialization/XmlParser.js";
 export type { XmlField, XmlFields, XmlReader, XmlTextReader } from "./serialization/XmlReader.js";
 export {

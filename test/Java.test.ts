@@ -222,7 +222,10 @@ describe("Java namespace surface", () => {
 
   it("keeps the serialization layer out of the namespace", () => {
     // Jackson and JAXB's territory, not the standard library's — these stay top-level only
-    for (const absent of ["readJson", "objectOf", "listOf", "parseXml", "readXml", "XmlElement"]) {
+    for (const absent of [
+      "readJson", "objectOf", "listOf", "writeJson", "objectFrom", "arrayFrom",
+      "parseXml", "readXml", "XmlElement", "writeXml", "elementFrom",
+    ]) {
       assert.ok(!(absent in Java), `${absent} should not be in Java.*`);
     }
     // and so do the binding failures they raise
