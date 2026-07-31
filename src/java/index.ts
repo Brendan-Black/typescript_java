@@ -1,10 +1,10 @@
 /**
  * The `Java` namespace: this library's reimplementation of the standard library, under Java's own names.
  *
- * Every class here is exported flat as well, prefixed — `Java.Map` and `JavaMap` are the same binding, so
- * `instanceof` and identity hold across the two spellings and neither is a wrapper around the other. The
- * prefix exists only because `Object`, `Map`, `Set`, `List` and `Iterator` would otherwise collide with
- * JavaScript's globals at module scope. A namespace is the qualifier that makes it unnecessary:
+ * This is the only way in: the standard library is reachable through `Java.*` and nowhere else. The names are
+ * renamed here at the boundary rather than wrapped, so nothing costs an indirection. A namespace is what lets
+ * them be Java's own — `Object`, `Map`, `Set`, `List` and `Iterator` would otherwise collide with JavaScript's
+ * globals at module scope:
  *
  * ```ts
  * import { Java } from "typescript-java";
@@ -21,7 +21,7 @@
  * is what `JavaObject.toString()` prints — a `Java.Map` still renders as `JavaMap@1f45`.
  *
  * WHAT IS NOT HERE: anything without a `java.lang`, `java.util` or `java.io` counterpart. The serialization
- * readers model Jackson and JAXB rather than the standard library, and stay at the top level along with
+ * layers model Jackson and JAXB rather than the standard library, and stay at the top level along with
  * `JsonBindException`, `XmlBindException` and `XmlParseException`; so do `boilerplateEqualityCheck` and the
  * `Contracts` module, which are this library's own tooling. `Java.*` is the standard library and nothing else.
  *
@@ -76,7 +76,7 @@ export type { Serializable } from "../serialization/Serializable.js";
 // ---------------------------------------------------------------------------------------------------------
 
 /**
- * The root of everything this library throws, exported flat as `TSJavaException`.
+ * The root of everything this library throws.
  *
  * CAVEAT: Java's `Throwable` is the root of everything throwable, full stop. This one extends `Error` and
  * roots only this library's hierarchy, so `catch (e) { if (e instanceof Java.Throwable) }` catches what this

@@ -1,33 +1,29 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import {
-  Java,
-  JavaAbstractMap,
-  JavaList,
-  JavaMap,
-  JavaMapEntry,
-  JavaObject,
-  JavaSet,
-  Optional,
-  TSJavaException,
-  TreeMap,
-  binarySearch,
-  comparator,
-  compareOf,
-  equalsOf,
-  hashAll,
-  hashCodeOf,
-  naturalOrder,
-  requireNonNull,
-  sort,
-} from "../src/index.js";
+import { Java } from "../src/index.js";
+import * as root from "../src/index.js";
+import { JavaAbstractMap, JavaMapEntry } from "../src/collections/JavaAbstractMap.js";
+import { binarySearch, sort } from "../src/collections/Collections.js";
+import { JavaList } from "../src/collections/JavaList.js";
+import { JavaMap } from "../src/collections/JavaMap.js";
+import { JavaSet } from "../src/collections/JavaSet.js";
+import { TreeMap } from "../src/collections/TreeMap.js";
+import { compareOf } from "../src/fundamentals/Comparable.js";
+import { comparator, naturalOrder } from "../src/fundamentals/Comparator.js";
+import { equalsOf, hashAll, hashCodeOf } from "../src/fundamentals/Hashing.js";
+import { JavaObject } from "../src/fundamentals/Object.js";
+import { requireNonNull } from "../src/fundamentals/Objects.js";
+import { Optional } from "../src/fundamentals/Optional.js";
+import { TSJavaException } from "../src/exceptions/TSJavaException.js";
 
 /**
- * The namespace re-exports bindings rather than wrapping them, so every one of these is an identity check
- * rather than a behavioural one. If they hold, `Java.X` cannot drift from `JavaX`: there is only one class.
+ * The namespace renames its bindings at the boundary rather than wrapping them, so every one of these is an
+ * identity check rather than a behavioural one. If they hold, `Java.X` cannot drift from the class the module
+ * declares: there is only one of it. The declarations keep their prefixed names because a class declared
+ * `Map` or `Object` would shadow, inside its own module, the global it is implemented on top of.
  */
 describe("Java namespace identity", () => {
-  it("names the same binding as the flat export, not a copy", () => {
+  it("names the declared class itself, not a copy of it", () => {
     assert.equal(Java.Object, JavaObject);
     assert.equal(Java.Map, JavaMap);
     assert.equal(Java.Set, JavaSet);
@@ -39,14 +35,11 @@ describe("Java namespace identity", () => {
     assert.equal(Java.Throwable, TSJavaException);
   });
 
-  it("keeps instanceof working across both spellings", () => {
+  it("keeps instanceof working through the namespace", () => {
     const map = new Java.Map<string, number>();
-    assert.ok(map instanceof JavaMap);
+    assert.ok(map instanceof Java.Map);
     assert.ok(map instanceof Java.AbstractMap);
     assert.ok(map instanceof Java.Object);
-
-    const flat = new JavaMap<string, number>();
-    assert.ok(flat instanceof Java.Map);
   });
 
   it("leaves constructor.name alone, so toString() is unchanged", () => {
@@ -194,6 +187,32 @@ describe("Java namespace surface", () => {
       "reverseOrder",
     ]);
     assert.equal(globalThis.Object.keys(Java.Collections).length, 15);
+  });
+
+  it("reaches the standard library only through Java.*", () => {
+    // the flat, prefixed spellings are gone from the package root; the namespace is the only way in
+    const removed = [
+      "JavaObject", "JavaCollection", "JavaAbstractSet", "JavaAbstractMap", "JavaMapEntry", "JavaList",
+      "JavaMap", "JavaSet", "TreeMap", "TreeSet", "Optional", "TSJavaException", "RuntimeException",
+      "ClassCastException", "ConcurrentModificationException", "IllegalArgumentException",
+      "IllegalStateException", "IndexOutOfBoundsException", "NoSuchElementException",
+      "NotImplementedException", "NullPointerException", "UnsupportedOperationException",
+      "hashCodeOf", "equalsOf", "hashAll", "compareOf", "requireNonNull", "requireNonNullElse",
+      "requireNonNullElseGet", "isNull", "nonNull", "comparator", "comparing", "naturalOrder",
+      "reverseOrder", "nullsFirst", "nullsLast", "sort", "max", "min", "binarySearch", "reverse", "swap",
+      "emptyList", "emptyMap", "emptySet", "singleton", "singletonList", "singletonMap",
+      "unmodifiableList", "unmodifiableMap", "unmodifiableSet",
+    ];
+    for (const absent of removed) {
+      assert.ok(!(absent in root), `${absent} should be reachable only as Java.*`);
+    }
+  });
+
+  it("keeps this library's own tooling at the top level", () => {
+    // no Java counterpart, so no `Java.*` spelling to move to
+    for (const present of ["boilerplateEqualityCheck", "setHashContractChecks", "hashContractChecksEnabled"]) {
+      assert.ok(present in root, `${present} should stay a top-level export`);
+    }
   });
 
   it("keeps the serialization layer out of the namespace", () => {

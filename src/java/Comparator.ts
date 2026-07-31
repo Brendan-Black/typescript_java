@@ -26,7 +26,7 @@ import {
 /**
  * Java's `Comparator<T>`: a comparison function carrying `reversed`, `then` and `thenComparing`.
  *
- * Structurally identical to the flat {@link ComparatorFunction} export — this declaration adds nothing and
+ * Structurally identical to {@link ComparatorFunction}, which it is declared from — this adds nothing and
  * exists only to give the name a type meaning that can sit beside the value meaning below. The two are
  * mutually assignable, so a comparator built anywhere in this library satisfies `Java.Comparator<T>` and
  * vice versa.
@@ -37,14 +37,14 @@ export interface Comparator<T> extends ComparatorFunction<T> {}
  * Java's `Comparator` statics.
  *
  * The one addition is `of`, which has no Java counterpart because Java does not need one: there, a lambda is
- * already a `Comparator` and the compiler supplies the default methods. It is the flat `comparator(fn)`
- * function, named for the `X.of(...)` idiom the rest of this library already follows.
+ * already a `Comparator` and the compiler supplies the default methods. It is named for the `X.of(...)` idiom
+ * the rest of this library already follows.
  *
  * The type is written out rather than inferred because `isolatedDeclarations` requires an exported `const` to
  * declare its own type, and `typeof` is what preserves the overloads on `comparing`.
  */
 export const Comparator: {
-  /** Lifts a plain `(a, b) => number` into a {@link Comparator}. Exported flat as `comparator`. */
+  /** Lifts a plain `(a, b) => number` into a {@link Comparator}. */
   of: typeof comparator;
   comparing: typeof comparing;
   naturalOrder: typeof naturalOrder;

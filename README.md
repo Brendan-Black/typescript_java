@@ -53,10 +53,10 @@ both false for structurally equal objects; `Java.List.contains` and `Java.List.i
 
 ## The `Java` namespace
 
-Everything above is reached through one exported namespace. The names inside it are Java's own — `Java.Map`,
-`Java.Object`, `Java.Collections.sort` — because the `Java` prefix that the flat exports carry exists only to
-keep `Object`, `Map`, `Set`, `List` and `Iterator` from colliding with JavaScript's globals at module scope. A
-namespace is the qualifier that makes the prefix unnecessary.
+The standard library is reached through one exported namespace, and only through it. The names inside are Java's
+own — `Java.Map`, `Java.Object`, `Java.Collections.sort` — because a namespace is the qualifier that keeps
+`Object`, `Map`, `Set`, `List` and `Iterator` from colliding with JavaScript's globals without a prefix on every
+name.
 
 ```ts
 import { Java } from "typescript-java";
@@ -67,31 +67,17 @@ const order: Java.Comparator<string> = Java.Comparator.naturalOrder<string>();
 Java.Collections.sort(names);
 ```
 
-`Java.Map` **is** `JavaMap` — the namespace re-exports the bindings rather than wrapping them, so `instanceof`
-and identity hold across both spellings and there is no cost to either. The classes keep their prefixed
-*declaration* names and are renamed only at the namespace boundary, which is deliberate: `JavaMap` stores its
-buckets in a real `Map` and `JavaObject` calls the real `Object.getPrototypeOf`, so a class actually named
-`Map` or `Object` would shadow the global it depends on. It also leaves `constructor.name` alone, so a
-`Java.Map` still renders as `JavaMap@1f45` in `toString()`.
+The namespace renames its bindings at the boundary rather than wrapping them, so there is no indirection to pay
+for and `instanceof` is exactly what you would expect. The classes themselves are still *declared* under prefixed
+names, which is deliberate rather than merely historical: `collections/JavaMap.ts` stores its buckets in a real
+`Map` and `fundamentals/Object.ts` calls the real `Object.getPrototypeOf`, so a class declared as `Map` or
+`Object` would shadow, inside its own module, the global it is built on. Renaming only on the way out sidesteps
+that, and leaves `constructor.name` alone as well — a `Java.Map` renders as `JavaMap@1f45` in `toString()`.
 
-The flat exports remain and still work. They are **deprecated** in favour of the namespaced spelling and will
-be removed before 1.0; an editor will strike them through and offer the replacement.
-
-Java's static-utility classes are sub-namespaces, which restores the reading they have in Java — and lets three
-functions drop the suffix they only ever carried for disambiguation:
-
-| Flat export | Namespaced | Note |
-| --- | --- | --- |
-| `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap` | `Java.Collections.*` | unusually generic names to take from a package root |
-| `emptyList`, `singletonMap`, `unmodifiableSet`, … | `Java.Collections.*` | |
-| `requireNonNull`, `isNull`, `nonNull`, … | `Java.Objects.*` | |
-| `hashCodeOf` | `Java.Objects.hashCode` | the `Of` existed only to avoid a bare `hashCode` |
-| `equalsOf` | `Java.Objects.equals` | |
-| `hashAll` | `Java.Objects.hash` | Java's own name for it |
-| `compareOf` | `Java.Objects.compare` | |
-| `comparing`, `naturalOrder`, `nullsFirst`, … | `Java.Comparator.*` | |
-| `comparator` | `Java.Comparator.of` | no Java counterpart; there a lambda already *is* a `Comparator` |
-| `TSJavaException` | `Java.Throwable` | the concept it stands in for |
+Java's static-utility classes are sub-namespaces, which restores the reading they have in Java: `Java.Collections`
+carries `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap` and the factories; `Java.Objects` carries
+`requireNonNull`, `isNull`, `nonNull` and the four that a package root could not have spelled plainly —
+`Java.Objects.hashCode`, `.equals`, `.hash` and `.compare`. A qualifier is what lets those take Java's own names.
 
 `Java.Comparator` is both the type and its statics, as it is in Java — `Java.Comparator<T>` annotates and
 `Java.Comparator.comparing(f)` constructs. TypeScript keeps types and values in separate declaration spaces,
@@ -124,19 +110,19 @@ npm install github:Brendan-Black/typescript_java
 
 ## What's in the box
 
-| Namespaced | Flat (deprecated) |
+| Group | Members |
 | --- | --- |
-| `Java.Object` | `JavaObject` |
-| `Java.Optional` | `Optional` |
-| `Java.Comparable`, `Java.NaturallyOrdered` | `Comparable`, `NaturallyOrdered` |
-| `Java.Comparator` — the type, plus `.of`, `.comparing`, `.naturalOrder`, `.reverseOrder`, `.nullsFirst`, `.nullsLast` | `Comparator`, `comparator`, `comparing`, `naturalOrder`, `reverseOrder`, `nullsFirst`, `nullsLast` |
-| `Java.Objects` — `.requireNonNull`, `.requireNonNullElse`, `.requireNonNullElseGet`, `.isNull`, `.nonNull`, `.hashCode`, `.equals`, `.hash`, `.compare` | `requireNonNull`, `requireNonNullElse`, `requireNonNullElseGet`, `isNull`, `nonNull`, `hashCodeOf`, `equalsOf`, `hashAll`, `compareOf` |
-| `Java.Collection`, `Java.AbstractSet`, `Java.AbstractMap`, `Java.Iterator`, `Java.ListIterator`, `Java.List`, `Java.Set`, `Java.Map`, `Java.MapEntry`, `Java.TreeMap`, `Java.TreeSet` | `JavaCollection`, `JavaAbstractSet`, `JavaAbstractMap`, `JavaIterator`, `JavaListIterator`, `JavaList`, `JavaSet`, `JavaMap`, `JavaMapEntry`, `TreeMap`, `TreeSet` |
-| `Java.Collections` — `.sort`, `.max`, `.min`, `.binarySearch`, `.reverse`, `.swap`, `.emptyList`, `.emptyMap`, `.emptySet`, `.singleton`, `.singletonList`, `.singletonMap`, `.unmodifiableList`, `.unmodifiableMap`, `.unmodifiableSet` | the same names, unqualified |
-| `Java.Throwable` and 13 subclasses, less the three binding failures | `TSJavaException` and 13 subclasses |
-| `Java.Serializable` (type only) | `Serializable` |
+| `Java.Object` | the base class: `equals`, `hashCode`, `toString` |
+| `Java.Optional` | |
+| `Java.Comparable`, `Java.NaturallyOrdered` | types only |
+| `Java.Comparator` | the type, plus `.of`, `.comparing`, `.naturalOrder`, `.reverseOrder`, `.nullsFirst`, `.nullsLast` |
+| `Java.Objects` | `.requireNonNull`, `.requireNonNullElse`, `.requireNonNullElseGet`, `.isNull`, `.nonNull`, `.hashCode`, `.equals`, `.hash`, `.compare` |
+| Collections | `Java.Collection`, `Java.AbstractSet`, `Java.AbstractMap`, `Java.Iterator`, `Java.ListIterator`, `Java.List`, `Java.Set`, `Java.Map`, `Java.MapEntry`, `Java.TreeMap`, `Java.TreeSet` |
+| `Java.Collections` | `.sort`, `.max`, `.min`, `.binarySearch`, `.reverse`, `.swap`, `.emptyList`, `.emptyMap`, `.emptySet`, `.singleton`, `.singletonList`, `.singletonMap`, `.unmodifiableList`, `.unmodifiableMap`, `.unmodifiableSet` |
+| `Java.Throwable` | and 13 subclasses, less the three binding failures |
+| `Java.Serializable` | type only |
 
-Not namespaced — no `java.*` counterpart:
+Outside the namespace — no `java.*` counterpart, so these are the package's top-level exports:
 
 | Module | Exports |
 | --- | --- |
@@ -148,7 +134,11 @@ Not namespaced — no `java.*` counterpart:
 | `serialization/XmlReader` | `XmlReader`, `XmlTextReader`, `XmlField`, `XmlFields`, `readXml`, `elementOf`, `elementNamed`, `textElement`, `mappingElement`, `attribute`, `optionalAttribute`, `textContent`, `child`, `optionalChild`, `childText`, `children`, `wrappedChildren`, `stringText`, `rawText`, `numberText`, `integerText`, `booleanText`, `enumText`, `mappingText` |
 | `serialization/XmlWriter` | `XmlWriter`, `XmlTextWriter`, `XmlPart`, `XmlParts`, `XmlDraft`, `XmlFormat`, `writeXml`, `elementFrom`, `textElementFrom`, `mappingElementFrom`, `intoAttribute`, `intoOptionalAttribute`, `intoText`, `intoChild`, `intoOptionalChild`, `intoChildText`, `intoChildren`, `intoWrappedChildren`, `stringAsText`, `numberAsText`, `integerAsText`, `booleanAsText`, `mappingAsText` |
 
-Everything is re-exported from the package root.
+These are re-exported from the package root, alongside `Java` itself. There is one import either way:
+
+```ts
+import { Java, readJson, objectOf, stringValue } from "typescript-java";
+```
 
 ### Hashing that matches the JVM
 
