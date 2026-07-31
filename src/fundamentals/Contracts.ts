@@ -89,8 +89,9 @@ export function checkHashContract(key: unknown): void {
   }
   console.warn(
     `[typescript-java] ${key.constructor.name} overrides equals() but not hashCode(), so its instances will be ` +
-      `bucketed by identity and cannot be found again in a JavaMap or JavaSet. Override hashCode() from the same ` +
-      `fields equals() compares — hashAll(...) does this in one line. Silence with setHashContractChecks(false).`
+      `bucketed by identity and cannot be found again in a Java.Map or Java.Set. Override hashCode() from the same ` +
+      `fields equals() compares — Java.Objects.hash(...) does this in one line. Silence with ` +
+      `setHashContractChecks(false).`
   );
 }
 
