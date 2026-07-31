@@ -99,7 +99,7 @@ standard library and nothing else.
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (740 tests); the serialization layer covers both directions of a JSON wire
+hierarchy are complete and tested (742 tests); the serialization layer covers both directions of a JSON wire
 contract and both of an XML one, parser and all. See [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -600,7 +600,10 @@ That guarantee is why a few things are refused rather than written: `NaN` and th
 than JavaScript was holding exactly, and a tag or attribute name that is not an XML name — no amount of escaping
 rescues `<order id>`, and a document nothing can read back is worse than a failure at the slot. Those failures
 carry the same XPath the reading ones do, and two parts aimed at one attribute is an `IllegalStateException`
-rather than one of the two values quietly vanishing.
+rather than one of the two values quietly vanishing. A property missing from the value at runtime — a `T` cast
+from a parsed document, or built against a version of the type without the field — is refused before it reaches
+its part, the same way `objectFrom` refuses one on the JSON side. Absence that is meant is said with
+`intoOptionalAttribute`, `intoOptionalChild`, or an empty collection.
 
 Indentation is opt-in and only ever goes between child elements, the one place a parser is entitled to throw
 whitespace away. An element holding text stays on its own line, and so does one holding text and children

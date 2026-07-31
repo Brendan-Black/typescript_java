@@ -288,7 +288,9 @@ export function mapAsObject<V>(value: JsonWriter<V>): JsonWriter<Iterable<readon
  * is stated with `optionalValue` when reading.
  *
  * Pass the source type explicitly — `objectFrom<User>({...})` — so a property the contract forgets is a
- * compile error rather than a field quietly missing from everything this sends.
+ * compile error rather than a field quietly missing from everything this sends. A property declared optional —
+ * `note?: string` — is the exception: {@link JsonProperties} keeps the `?`, so such a property may be left out
+ * of the contract, and is then never written.
  */
 export function objectFrom<T extends object>(properties: JsonProperties<T>): JsonWriter<T> {
   // The same widening objectOf does, for the same reason: JsonProperties<T> is a mapped type over an

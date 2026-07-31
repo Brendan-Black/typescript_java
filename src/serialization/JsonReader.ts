@@ -353,7 +353,9 @@ export function objectAsMap<V>(value: JsonReader<V>): JsonReader<JavaMap<string,
  * choice that survives a server adding a field.
  *
  * Pass the target type explicitly — `objectOf<User>({...})` — so that a field the contract forgets is a compile
- * error rather than a shape TypeScript infers around.
+ * error rather than a shape TypeScript infers around. A field declared optional — `note?: string` — is the
+ * exception: {@link JsonFields} keeps the `?`, so such a field may be left out of the contract, and is then
+ * never read.
  */
 export function objectOf<T extends object>(fields: JsonFields<T>): JsonReader<T> {
   // JsonFields<T> is a mapped type over an unresolved T, which nothing built in describes as an ordinary record.

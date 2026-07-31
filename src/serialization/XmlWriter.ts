@@ -226,11 +226,17 @@ export function mappingElementFrom<T, R>(writer: XmlWriter<T>, transform: (value
  * ```
  *
  * Every property gets written — {@link intoOptionalAttribute}, {@link intoOptionalChild} and
- * {@link intoChildren} are the three that write nothing when there is nothing to say. Attributes and children
- * come out in the order the parts are declared here, so the document's shape is readable off the contract.
+ * {@link intoChildren} are the three that write nothing when there is nothing to say. Absence is stated with
+ * one of those rather than by leaving the property off the value: a property missing at runtime is refused
+ * here, before it reaches its part. That is the one case where a `T` can lie — a value cast from a parsed
+ * document, or one built against a version of the type without the field — and a part handed nothing would
+ * write `undefined` into an attribute or drop the element's text without a word. Attributes and children come
+ * out in the order the parts are declared here, so the document's shape is readable off the contract.
  *
  * Pass the source type explicitly, `elementFrom<Order>({...})`, so a forgotten property is a compile error
- * rather than a field quietly missing from everything this sends.
+ * rather than a field quietly missing from everything this sends. A property declared optional — `note?:
+ * string` — is the exception: {@link XmlParts} keeps the `?`, so such a property may be left out of the
+ * contract, and is then never written at all.
  */
 export function elementFrom<T extends object>(parts: XmlParts<T>): XmlWriter<T> {
   // Same widening as elementOf in XmlReader, for the same reason: XmlParts<T> is a mapped type over an
@@ -243,7 +249,13 @@ export function elementFrom<T extends object>(parts: XmlParts<T>): XmlWriter<T> 
       const source = value as unknown as Readonly<Record<string, unknown>>;
       const draft = new XmlDraft();
       for (const [property, part] of writers) {
-        part.write(source[property], draft, path);
+        const held = source[property];
+        if (held === undefined) {
+          // Named in the message rather than appended to the path: a property is a name in the type, and the
+          // step it becomes in the document — `@id`, `/total` — is the part's decision rather than this one's.
+          throw new XmlBindException(path, `expected a value for ${property}, got nothing`);
+        }
+        part.write(held, draft, path);
       }
       return draft.build(name);
     },

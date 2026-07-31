@@ -257,6 +257,26 @@ describe("XmlWriter failures", () => {
     assert.throws(() => writeXml("a", { a: "1", b: "2" }, twice), IllegalStateException);
   });
 
+  it("refuses a property missing at runtime, rather than handing nothing to its part", () => {
+    // the one case where a T can lie: cast from a parsed document, or built against an older version of the type
+    const partial = { id: "A-1", priority: "high", note: Optional.empty<string>() } as unknown as Order;
+    const failure = bindFailure(partial, order, "order");
+    assert.equal(failure.getPath(), "/order");
+    assert.match(failure.message, /expected a value for total, got nothing/);
+  });
+
+  it("refuses it whichever kind of part was waiting for it", () => {
+    // left to reach the part, each of these failed differently and only one of them said so: an attribute threw
+    // out of the escaper, a run of children threw on iterating, and text was dropped in silence
+    const absent = {} as unknown as { value: never };
+    const asAttribute = elementFrom<{ value: never }>({ value: intoAttribute("value") });
+    const asText = elementFrom<{ value: never }>({ value: intoText() });
+    const asChildren = elementFrom<{ value: never }>({ value: intoChildren("value", textElementFrom()) });
+    for (const writer of [asAttribute, asText, asChildren]) {
+      assert.throws(() => writeXml("holder", absent, writer), XmlBindException);
+    }
+  });
+
   it("lets a draft be filled by hand, for a part of one's own", () => {
     const draft = new XmlDraft();
     draft.putAttribute("x", "1");

@@ -273,7 +273,8 @@ function orString<T>(text: XmlTextReader<T> | undefined): XmlTextReader<T | stri
  * mention is ignored.
  *
  * Pass the target type explicitly, `elementOf<Order>({...})`, so a forgotten property is a compile error rather
- * than a shape TypeScript infers around.
+ * than a shape TypeScript infers around. A property declared optional — `note?: string` — is the exception:
+ * {@link XmlFields} keeps the `?`, so such a property may be left out of the contract, and is then never read.
  */
 export function elementOf<T extends object>(fields: XmlFields<T>): XmlReader<T> {
   // Same widening as objectOf in JsonReader, for the same reason: XmlFields<T> is a mapped type over an
