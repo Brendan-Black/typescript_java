@@ -1,4 +1,4 @@
-import { JavaObject } from "./Object.js";
+import { _Object } from "./Object.js";
 
 /**
  * Identity hash codes for values that have no value-based hash of their own — plain objects, arrays, functions,
@@ -46,12 +46,12 @@ function numberHashCode(value: number): number {
 /**
  * Java's `Objects.hashCode(o)`, widened to cover the JavaScript types Java has no equivalent for.
  *
- * Every hash-based collection in this library routes through here, which is what lets a {@link JavaMap} be keyed
- * on a string, a number, or a {@link JavaObject} with equal comfort. The rules:
+ * Every hash-based collection in this library routes through here, which is what lets a {@link Map} be keyed
+ * on a string, a number, or an {@link _Object} with equal comfort. The rules:
  *
  * - `null` and `undefined` hash to `0`, matching `Objects.hashCode(null)`
  * - strings, numbers, bigints and booleans hash by value, using Java's own algorithms where Java has one
- * - a {@link JavaObject} hashes to whatever its `hashCode()` returns, so value types can opt in by overriding
+ * - an {@link _Object} hashes to whatever its `hashCode()` returns, so value types can opt in by overriding
  * - anything else — a plain object, an array, a function — gets a stable identity hash, which is exactly what
  *   Java's `Object.hashCode` gives you for a class that has not overridden it
  *
@@ -79,23 +79,23 @@ export function hashCodeOf(value: unknown): number {
       return registeredKey === undefined ? identityHashCode(value) : stringHashCode(registeredKey);
     }
     default:
-      // deliberately `instanceof JavaObject` rather than duck-typing on "has a hashCode method": an arbitrary
+      // deliberately `instanceof _Object` rather than duck-typing on "has a hashCode method": an arbitrary
       // object carrying a `hashCode` property is far more likely to be unrelated than to be honouring the contract.
       // `| 0` because a sloppy override is free to return a float, and a bucket key must be an integer.
-      return value instanceof JavaObject ? value.hashCode() | 0 : identityHashCode(value as object);
+      return value instanceof _Object ? value.hashCode() | 0 : identityHashCode(value as object);
   }
 }
 
 /**
  * Java's `Objects.equals(a, b)`, widened the same way {@link hashCodeOf} is.
  *
- * A {@link JavaObject} is asked for its own answer via `equals`; everything else falls back to SameValueZero,
+ * An {@link _Object} is asked for its own answer via `equals`; everything else falls back to SameValueZero,
  * the comparison JavaScript's own `Map` and `Set` use.
  *
  * NOTE: `null` and `undefined` are distinct here, and neither equals the other. A map is a container, and
  * silently rewriting one of the caller's keys into the other would be a worse surprise than keeping both.
  *
- * @param a the left-hand value; if it is a JavaObject, its `equals` decides the answer
+ * @param a the left-hand value; if it is a `Java.Object`, its `equals` decides the answer
  * @param b the right-hand value
  */
 export function equalsOf(a: unknown, b: unknown): boolean {
@@ -105,7 +105,7 @@ export function equalsOf(a: unknown, b: unknown): boolean {
   if (a === null || a === undefined) {
     return false;
   }
-  if (a instanceof JavaObject) {
+  if (a instanceof _Object) {
     // Java calls `a.equals(b)`, and `equals` is free to be asymmetric when a subclass is sloppy about it.
     // Keeping the argument order means a broken override misbehaves here the same way it would on the JVM.
     return a.equals(b);

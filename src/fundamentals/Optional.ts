@@ -3,9 +3,9 @@ import { NoSuchElementException } from "../exceptions/NoSuchElementException.js"
 import { NullPointerException } from "../exceptions/NullPointerException.js";
 import type { Serializable } from "../serialization/Serializable.js";
 import { hashCodeOf } from "./Hashing.js";
-import { boilerplateEqualityCheck, JavaObject } from "./Object.js";
+import { boilerplateEqualityCheck, _Object } from "./Object.js";
 
-export class Optional<T> extends JavaObject implements Serializable {
+export class Optional<T> extends _Object implements Serializable {
   #value: T | null;
 
   /**
@@ -187,7 +187,7 @@ export class Optional<T> extends JavaObject implements Serializable {
 
   public override equals(other: unknown): boolean {
     return boilerplateEqualityCheck<Optional<T>>({ obj1: this, obj2: other }, (o1, o2) => {
-      // `Reflect.construct(JavaObject, [], Optional)` runs JavaObject's constructor against this prototype, so
+      // `Reflect.construct(_Object, [], Optional)` runs _Object's constructor against this prototype, so
       // it clears both of boilerplateEqualityCheck's gates — `#hash` is present, the prototype matches — while
       // never installing `#value`. Reading that field off it would throw a TypeError. Java's contract says
       // equals returns false for anything it does not recognise, never throws, so brand-check first.
@@ -201,10 +201,10 @@ export class Optional<T> extends JavaObject implements Serializable {
   /**
    * Java's `Optional.hashCode()` is `Objects.hashCode(value)` — the contained value's hash, or 0 when empty.
    *
-   * This has to override {@link JavaObject.hashCode}, which is identity-based. `equals` here compares the
+   * This has to override {@link _Object.hashCode}, which is identity-based. `equals` here compares the
    * contained value, so leaving the inherited identity hash in place would mean two equal Optionals with
    * different hash codes: a broken contract, and an Optional that could never be found again once used as a
-   * `JavaMap` key.
+   * `Map` key.
    */
   public override hashCode(): number {
     return hashCodeOf(this.#value);
@@ -241,7 +241,7 @@ export class Optional<T> extends JavaObject implements Serializable {
    * A contained value that is itself serialisable has its own `toJSON` called here rather than being handed
    * back raw. `JSON.stringify` consults `toJSON` once per slot: having taken this one, it serialises whatever
    * comes back by its own rules and does not look for a second hook on it. Returning the value unexamined
-   * would therefore drop the value's encoding entirely — an `Optional<JavaMap>` would come out as `{}`, since
+   * would therefore drop the value's encoding entirely — an `Optional<Map>` would come out as `{}`, since
    * a map keeps its contents in private fields. Nesting one slot deeper is safe without this, because the
    * engine does re-check `toJSON` on each *property* of what it gets back.
    */

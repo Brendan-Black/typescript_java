@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { JavaList } from "../src/collections/JavaList.js";
+import { List } from "../src/collections/List.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { IllegalStateException } from "../src/exceptions/IllegalStateException.js";
 import { XmlBindException } from "../src/exceptions/XmlBindException.js";
@@ -63,7 +63,7 @@ interface Order {
   priority: Priority;
   total: Money;
   note: Optional<string>;
-  items: JavaList<Item>;
+  items: List<Item>;
   paid: boolean;
 }
 
@@ -109,7 +109,7 @@ function anOrder(): Order {
     priority: "high",
     total: { currency: "USD", amount: 19.99 },
     note: Optional.of("gift wrap"),
-    items: new JavaList<Item>([
+    items: new List<Item>([
       { sku: "hat", quantity: 2 },
       { sku: "scarf", quantity: 1 },
     ]),
@@ -194,22 +194,22 @@ describe("XmlWriter parts", () => {
   });
 
   it("writes one child per value, and nothing for an empty collection", () => {
-    const writer = elementFrom<{ tags: JavaList<string> }>({ tags: intoChildren("tag", textElementFrom()) });
-    assert.equal(writeXml("a", { tags: new JavaList(["x", "y"]) }, writer), "<a><tag>x</tag><tag>y</tag></a>");
-    assert.equal(writeXml("a", { tags: new JavaList<string>() }, writer), "<a/>");
+    const writer = elementFrom<{ tags: List<string> }>({ tags: intoChildren("tag", textElementFrom()) });
+    assert.equal(writeXml("a", { tags: new List(["x", "y"]) }, writer), "<a><tag>x</tag><tag>y</tag></a>");
+    assert.equal(writeXml("a", { tags: new List<string>() }, writer), "<a/>");
   });
 
-  it("takes any iterable, not only a JavaList", () => {
+  it("takes any iterable, not only a List", () => {
     const writer = elementFrom<{ tags: readonly string[] }>({ tags: intoChildren("tag", textElementFrom()) });
     assert.equal(writeXml("a", { tags: ["x"] }, writer), "<a><tag>x</tag></a>");
   });
 
   it("writes the wrapper even when the collection is empty, as JAXB does", () => {
-    const writer = elementFrom<{ items: JavaList<string> }>({
+    const writer = elementFrom<{ items: List<string> }>({
       items: intoWrappedChildren("items", "item", textElementFrom()),
     });
-    assert.equal(writeXml("a", { items: new JavaList<string>() }, writer), "<a><items/></a>");
-    assert.equal(writeXml("a", { items: new JavaList(["hat"]) }, writer), "<a><items><item>hat</item></items></a>");
+    assert.equal(writeXml("a", { items: new List<string>() }, writer), "<a><items/></a>");
+    assert.equal(writeXml("a", { items: new List(["hat"]) }, writer), "<a><items><item>hat</item></items></a>");
   });
 
   it("writes text alongside attributes and children", () => {

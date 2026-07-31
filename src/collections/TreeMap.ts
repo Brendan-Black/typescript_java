@@ -3,10 +3,10 @@ import { IllegalArgumentException } from "../exceptions/IllegalArgumentException
 import { NoSuchElementException } from "../exceptions/NoSuchElementException.js";
 import { compareOf, type NaturallyOrdered } from "../fundamentals/Comparable.js";
 import { elementAt } from "../fundamentals/Indexing.js";
-import { JavaAbstractMap, JavaMapEntry } from "./JavaAbstractMap.js";
-import { unsupported } from "./JavaCollection.js";
+import { AbstractMap, MapEntry } from "./AbstractMap.js";
+import { unsupported } from "./Collection.js";
 
-/** One key/value pair in sorted position. The key is fixed for the entry's lifetime, as it is in {@link JavaMap}. */
+/** One key/value pair in sorted position. The key is fixed for the entry's lifetime, as it is in {@link Map}. */
 interface TreeEntry<K, V> {
   readonly key: K;
   value: V;
@@ -48,7 +48,7 @@ interface RangeBounds<K> {
 /**
  * Java's `TreeMap`: a map that keeps its keys in order rather than in buckets.
  *
- * Where {@link JavaMap} asks a key for its `hashCode`, this asks how it compares — which is what you want when
+ * Where {@link Map} asks a key for its `hashCode`, this asks how it compares — which is what you want when
  * the key type has a sensible order but no trustworthy hash, and it is the only way to ask a map the questions
  * below:
  *
@@ -75,7 +75,7 @@ interface RangeBounds<K> {
  * compare equal are one entry here even if `equals` says otherwise, and Java behaves the same way — which is
  * what the consistency-with-equals contract on {@link Comparable} is asking you to avoid.
  */
-export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
+export class TreeMap<K, V> extends AbstractMap<K, V> {
   #state: TreeMapState<K, V>;
   /** `null` means natural order, so {@link comparator} can report that the way Java's `SortedMap` does */
   #comparator: ((a: K, b: K) => number) | null;
@@ -114,7 +114,7 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
 
   /**
    * An immutable sorted map, refusing every mutator. There is no `Map.of` in Java that sorts; this is the
-   * `TreeMap` analogue of {@link JavaMap.of}.
+   * `TreeMap` analogue of {@link Map.of}.
    *
    * Natural order only, and the key type is constrained to prove it has one — a compile error rather than a
    * `ClassCastException` on the first insertion.
@@ -129,7 +129,7 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    * Java's `Collections.unmodifiableSortedMap`: a read-only *view*, not a copy.
    *
    * The view shares the original's storage and its comparator, so later changes to the original show through —
-   * see {@link JavaMap.unmodifiable} for why that is worth knowing before you hand one out.
+   * see {@link Map.unmodifiable} for why that is worth knowing before you hand one out.
    *
    * Wrapping a range view keeps its bounds, so an unmodifiable `subMap` sees exactly what the `subMap` did.
    */
@@ -254,13 +254,13 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
     return this.#visible(index) ? this.#entryAt(index, "TreeMap navigation").key : null;
   }
 
-  /** A {@link JavaMapEntry} snapshot of a position, or `null` if the position is off either end. */
-  #snapshot(index: number): JavaMapEntry<K, V> | null {
+  /** A {@link MapEntry} snapshot of a position, or `null` if the position is off either end. */
+  #snapshot(index: number): MapEntry<K, V> | null {
     if (!this.#visible(index)) {
       return null;
     }
     const entry = this.#entryAt(index, "TreeMap navigation");
-    return new JavaMapEntry<K, V>(entry.key, entry.value);
+    return new MapEntry<K, V>(entry.key, entry.value);
   }
 
   /**
@@ -428,12 +428,12 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
   }
 
   /** Java's `NavigableMap.firstEntry`: the least entry, or `null` if the map is empty. */
-  public firstEntry(): JavaMapEntry<K, V> | null {
+  public firstEntry(): MapEntry<K, V> | null {
     return this.#snapshot(this.#start());
   }
 
   /** Java's `NavigableMap.lastEntry`: the greatest entry, or `null` if the map is empty. */
-  public lastEntry(): JavaMapEntry<K, V> | null {
+  public lastEntry(): MapEntry<K, V> | null {
     return this.#snapshot(this.#end() - 1);
   }
 
@@ -465,22 +465,22 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
   }
 
   /** Java's `NavigableMap.floorEntry`: the whole entry {@link floorKey} names, or `null`. */
-  public floorEntry(key: K): JavaMapEntry<K, V> | null {
+  public floorEntry(key: K): MapEntry<K, V> | null {
     return this.#snapshot(this.#upperBound(key, true) - 1);
   }
 
   /** Java's `NavigableMap.ceilingEntry`. See {@link floorKey}. */
-  public ceilingEntry(key: K): JavaMapEntry<K, V> | null {
+  public ceilingEntry(key: K): MapEntry<K, V> | null {
     return this.#snapshot(this.#lowerBound(key, true));
   }
 
   /** Java's `NavigableMap.lowerEntry`. See {@link floorKey}. */
-  public lowerEntry(key: K): JavaMapEntry<K, V> | null {
+  public lowerEntry(key: K): MapEntry<K, V> | null {
     return this.#snapshot(this.#upperBound(key, false) - 1);
   }
 
   /** Java's `NavigableMap.higherEntry`. See {@link floorKey}. */
-  public higherEntry(key: K): JavaMapEntry<K, V> | null {
+  public higherEntry(key: K): MapEntry<K, V> | null {
     return this.#snapshot(this.#lowerBound(key, false));
   }
 
@@ -489,16 +489,16 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    * empty. The queue-like half of a sorted map — this and {@link pollLastEntry} are what make one usable as a
    * priority queue.
    */
-  public pollFirstEntry(): JavaMapEntry<K, V> | null {
+  public pollFirstEntry(): MapEntry<K, V> | null {
     return this.#poll(this.#start(), "pollFirstEntry");
   }
 
   /** Java's `NavigableMap.pollLastEntry`: removes and returns the greatest entry, or `null`. */
-  public pollLastEntry(): JavaMapEntry<K, V> | null {
+  public pollLastEntry(): MapEntry<K, V> | null {
     return this.#poll(this.#end() - 1, "pollLastEntry");
   }
 
-  #poll(index: number, operation: string): JavaMapEntry<K, V> | null {
+  #poll(index: number, operation: string): MapEntry<K, V> | null {
     this.requireMutable(operation);
     const snapshot = this.#snapshot(index);
     if (snapshot === null) {
@@ -550,7 +550,7 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
    * NOTE: the two flags come last, where Java interleaves them as `(from, fromInclusive, to, toInclusive)`.
    * They cannot be interleaved here: a `TreeMap<boolean, V>` would make the second argument a key and a flag at
    * the same time, with nothing at runtime able to tell which was meant. Same reason
-   * {@link JavaList.removeAt} exists.
+   * {@link List.removeAt} exists.
    *
    * @throws IllegalArgumentException if the range runs backwards, as Java's does, or if this map is itself a
    *   range view and either bound falls outside it — which is also what stops a range being widened by
@@ -601,8 +601,8 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
     }
   }
 
-  /** The entries, greatest first, as {@link JavaMapEntry} snapshots. Fail-fast, like {@link Symbol.iterator}. */
-  public *descendingEntries(): IterableIterator<JavaMapEntry<K, V>> {
+  /** The entries, greatest first, as {@link MapEntry} snapshots. Fail-fast, like {@link Symbol.iterator}. */
+  public *descendingEntries(): IterableIterator<MapEntry<K, V>> {
     const expected = this.#state.modCount;
     const start = this.#start();
     for (let i = this.#end() - 1; i >= start; i--) {
@@ -610,7 +610,7 @@ export class TreeMap<K, V> extends JavaAbstractMap<K, V> {
         throw new ConcurrentModificationException("The map was modified while it was being iterated.");
       }
       const entry = this.#entryAt(i, "TreeMap descending iterator");
-      yield new JavaMapEntry<K, V>(entry.key, entry.value);
+      yield new MapEntry<K, V>(entry.key, entry.value);
     }
   }
 

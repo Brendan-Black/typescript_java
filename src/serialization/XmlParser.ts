@@ -1,8 +1,8 @@
-import { JavaList } from "../collections/JavaList.js";
-import { JavaMap } from "../collections/JavaMap.js";
+import { List } from "../collections/List.js";
+import { Map } from "../collections/Map.js";
 import { XmlParseException } from "../exceptions/XmlParseException.js";
 import { hashAll } from "../fundamentals/Hashing.js";
-import { boilerplateEqualityCheck, JavaObject } from "../fundamentals/Object.js";
+import { boilerplateEqualityCheck, _Object } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
 
 /**
@@ -25,10 +25,10 @@ import { Optional } from "../fundamentals/Optional.js";
  * and {@link getLocalName} is there for a caller who wants to match without the prefix. Resolving prefixes to
  * URIs is a separate job that no document this parser is aimed at needs done for it.
  */
-export class XmlElement extends JavaObject {
+export class XmlElement extends _Object {
   readonly #name: string;
-  readonly #attributes: JavaMap<string, string>;
-  readonly #children: JavaList<XmlElement>;
+  readonly #attributes: Map<string, string>;
+  readonly #children: List<XmlElement>;
   readonly #text: string;
 
   /**
@@ -45,8 +45,8 @@ export class XmlElement extends JavaObject {
   ) {
     super();
     this.#name = name;
-    this.#attributes = new JavaMap<string, string>(attributes);
-    this.#children = new JavaList<XmlElement>(children);
+    this.#attributes = new Map<string, string>(attributes);
+    this.#children = new List<XmlElement>(children);
     this.#text = text;
   }
 
@@ -73,24 +73,24 @@ export class XmlElement extends JavaObject {
   }
 
   /** Every attribute, in document order. Unmodifiable: an element is a record of what was parsed. */
-  public getAttributes(): JavaMap<string, string> {
-    return JavaMap.unmodifiable(this.#attributes);
+  public getAttributes(): Map<string, string> {
+    return Map.unmodifiable(this.#attributes);
   }
 
   /** The elements directly inside this one, in document order. Unmodifiable, for the same reason. */
-  public getChildren(): JavaList<XmlElement> {
-    return JavaList.unmodifiable(this.#children);
+  public getChildren(): List<XmlElement> {
+    return List.unmodifiable(this.#children);
   }
 
   /** The direct children with this tag name, in document order. Empty when there are none. */
-  public getChildrenNamed(name: string): JavaList<XmlElement> {
-    const found = new JavaList<XmlElement>();
+  public getChildrenNamed(name: string): List<XmlElement> {
+    const found = new List<XmlElement>();
     for (const child of this.#children) {
       if (child.#name === name) {
         found.add(child);
       }
     }
-    return JavaList.unmodifiable(found);
+    return List.unmodifiable(found);
   }
 
   /**
@@ -195,7 +195,7 @@ export class XmlElement extends JavaObject {
 }
 
 /** The five entities XML defines without a DTD. Everything else needs a declaration this parser cannot read. */
-const NAMED_ENTITIES: ReadonlyMap<string, string> = new Map<string, string>([
+const NAMED_ENTITIES: ReadonlyMap<string, string> = new globalThis.Map<string, string>([
   ["amp", "&"],
   ["lt", "<"],
   ["gt", ">"],

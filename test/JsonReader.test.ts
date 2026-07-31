@@ -1,15 +1,15 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { JavaMapEntry } from "../src/collections/JavaAbstractMap.js";
-import { JavaList } from "../src/collections/JavaList.js";
-import { JavaMap } from "../src/collections/JavaMap.js";
-import { JavaSet } from "../src/collections/JavaSet.js";
+import { MapEntry } from "../src/collections/AbstractMap.js";
+import { List } from "../src/collections/List.js";
+import { Map } from "../src/collections/Map.js";
+import { Set } from "../src/collections/Set.js";
 import { TreeMap } from "../src/collections/TreeMap.js";
 import { TreeSet } from "../src/collections/TreeSet.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { JsonBindException } from "../src/exceptions/JsonBindException.js";
 import { reverseOrder } from "../src/fundamentals/Comparator.js";
-import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
+import { boilerplateEqualityCheck, _Object } from "../src/fundamentals/Object.js";
 import { Optional } from "../src/fundamentals/Optional.js";
 import { hashAll } from "../src/fundamentals/Hashing.js";
 import {
@@ -101,7 +101,7 @@ describe("JsonReader absence", () => {
   });
 
   it("withDefault substitutes for null and absent, and calls the supplier per read", () => {
-    const reader = withDefault(listOf(stringValue), () => new JavaList<string>());
+    const reader = withDefault(listOf(stringValue), () => new List<string>());
     const first = reader.read(undefined);
     const second = reader.read(null);
     first.add("mine");
@@ -129,7 +129,7 @@ describe("JsonReader collections", () => {
 
   it("reads a map from the pair form a map writes", () => {
     const map = mapOf(stringValue, numberValue).read([["a", 1], ["b", 2]]);
-    assert.equal(map.equals(new JavaMap<string, number>([["a", 1], ["b", 2]])), true);
+    assert.equal(map.equals(new Map<string, number>([["a", 1], ["b", 2]])), true);
   });
 
   it("keeps the last of a repeated key, as the constructor does", () => {
@@ -145,7 +145,7 @@ describe("JsonReader collections", () => {
 
   it("reads a JSON object as a string-keyed map, which is what Jackson sends for one", () => {
     const map = objectAsMap(numberValue).read({ a: 1, b: 2 });
-    assert.equal(map.equals(new JavaMap<string, number>([["a", 1], ["b", 2]])), true);
+    assert.equal(map.equals(new Map<string, number>([["a", 1], ["b", 2]])), true);
   });
 
   it("reads the sorted collections, in natural order or in a given one", () => {
@@ -160,7 +160,7 @@ describe("JsonReader collections", () => {
 
   it("reads a map entry from the object form one writes", () => {
     const entry = entryOf(stringValue, numberValue).read({ key: "a", value: 1 });
-    assert.equal(entry.equals(new JavaMapEntry<string, number>("a", 1)), true);
+    assert.equal(entry.equals(new MapEntry<string, number>("a", 1)), true);
   });
 });
 
@@ -241,12 +241,12 @@ describe("readJson", () => {
 
 describe("JsonReader round trips what this library writes", () => {
   it("round-trips every collection through its own toJSON", () => {
-    const list = new JavaList<number>([1, 2, 3]);
-    const set = new JavaSet<string>(["a", "b"]);
-    const map = new JavaMap<string, number>([["a", 1], ["b", 2]]);
+    const list = new List<number>([1, 2, 3]);
+    const set = new Set<string>(["a", "b"]);
+    const map = new Map<string, number>([["a", 1], ["b", 2]]);
     const treeSet = new TreeSet<number>([3, 1, 2]);
     const treeMap = new TreeMap<string, number>([["b", 2], ["a", 1]]);
-    const entry = new JavaMapEntry<string, number>("a", 1);
+    const entry = new MapEntry<string, number>("a", 1);
 
     assert.equal(reread(list, listOf(numberValue)).equals(list), true);
     assert.equal(reread(set, setOf(stringValue)).equals(set), true);
@@ -265,7 +265,7 @@ describe("JsonReader round trips what this library writes", () => {
   });
 
   it("round-trips a map nested inside a DTO", () => {
-    const dto = { counts: new JavaMap<string, number>([["a", 1]]), tags: new JavaSet<string>(["x"]) };
+    const dto = { counts: new Map<string, number>([["a", 1]]), tags: new Set<string>(["x"]) };
     const read = reread(dto, objectOf({ counts: mapOf(stringValue, numberValue), tags: setOf(stringValue) }));
     assert.equal(read.counts.equals(dto.counts), true);
     assert.equal(read.tags.equals(dto.tags), true);
@@ -277,7 +277,7 @@ function reread<T>(value: unknown, reader: JsonReader<T>): T {
   return readJson(JSON.stringify(value), reader);
 }
 
-class Point extends JavaObject {
+class Point extends _Object {
   constructor(public readonly x: number, public readonly y: number) {
     super();
   }

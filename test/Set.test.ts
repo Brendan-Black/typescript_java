@@ -1,16 +1,16 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { JavaAbstractSet, JavaCollection } from "../src/collections/JavaCollection.js";
-import { JavaList } from "../src/collections/JavaList.js";
-import { JavaMap } from "../src/collections/JavaMap.js";
-import { JavaSet } from "../src/collections/JavaSet.js";
+import { AbstractSet, Collection } from "../src/collections/Collection.js";
+import { List } from "../src/collections/List.js";
+import { Map } from "../src/collections/Map.js";
+import { Set } from "../src/collections/Set.js";
 import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
 import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
 import { hashAll } from "../src/fundamentals/Hashing.js";
-import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
+import { boilerplateEqualityCheck, _Object } from "../src/fundamentals/Object.js";
 import { Optional } from "../src/fundamentals/Optional.js";
 
-class Point extends JavaObject {
+class Point extends _Object {
   constructor(public readonly x: number, public readonly y: number) {
     super();
   }
@@ -25,9 +25,9 @@ class Point extends JavaObject {
   }
 }
 
-describe("JavaSet membership", () => {
+describe("Set membership", () => {
   it("collapses structurally equal members into one", () => {
-    const set = new JavaSet<Point>();
+    const set = new Set<Point>();
     set.add(new Point(1, 2));
     set.add(new Point(1, 2));
     assert.equal(set.size(), 1);
@@ -35,34 +35,34 @@ describe("JavaSet membership", () => {
   });
 
   it("does what a plain JavaScript Set cannot", () => {
-    const native = new Set<Point>();
+    const native = new globalThis.Set<Point>();
     native.add(new Point(1, 2));
     native.add(new Point(1, 2));
     assert.equal(native.size, 2);
   });
 
   it("keeps members that are not equal", () => {
-    const set = new JavaSet<Point>([new Point(1, 2), new Point(3, 4)]);
+    const set = new Set<Point>([new Point(1, 2), new Point(3, 4)]);
     assert.equal(set.size(), 2);
     assert.equal(set.contains(new Point(3, 4)), true);
     assert.equal(set.contains(new Point(9, 9)), false);
   });
 
   it("add reports whether the set changed", () => {
-    const set = new JavaSet<Point>();
+    const set = new Set<Point>();
     assert.equal(set.add(new Point(1, 2)), true);
     assert.equal(set.add(new Point(1, 2)), false);
   });
 
   it("remove reports whether the set changed", () => {
-    const set = new JavaSet<Point>([new Point(1, 2)]);
+    const set = new Set<Point>([new Point(1, 2)]);
     assert.equal(set.remove(new Point(1, 2)), true);
     assert.equal(set.remove(new Point(1, 2)), false);
     assert.equal(set.isEmpty(), true);
   });
 
   it("handles primitives, null and NaN", () => {
-    const set = new JavaSet<any>(["a", 1, null, NaN, true]);
+    const set = new Set<any>(["a", 1, null, NaN, true]);
     assert.equal(set.size(), 5);
     assert.equal(set.contains(null), true);
     assert.equal(set.contains(NaN), true);
@@ -71,7 +71,7 @@ describe("JavaSet membership", () => {
   });
 
   it("accepts Optionals as members", () => {
-    const set = new JavaSet<Optional<number>>();
+    const set = new Set<Optional<number>>();
     set.add(Optional.of(5));
     set.add(Optional.of(5));
     assert.equal(set.size(), 1);
@@ -80,14 +80,14 @@ describe("JavaSet membership", () => {
   });
 
   it("dedupes the values it is constructed from", () => {
-    const set = new JavaSet<Point>([new Point(1, 2), new Point(1, 2), new Point(3, 4)]);
+    const set = new Set<Point>([new Point(1, 2), new Point(1, 2), new Point(3, 4)]);
     assert.equal(set.size(), 2);
   });
 });
 
-describe("JavaSet bulk operations", () => {
+describe("Set bulk operations", () => {
   it("addAll reports whether anything was new", () => {
-    const set = new JavaSet<number>([1, 2]);
+    const set = new Set<number>([1, 2]);
     assert.equal(set.addAll([2, 3]), true);
     assert.equal(set.addAll([1, 2, 3]), false);
     assert.deepEqual(set.toArray(), [1, 2, 3]);
@@ -95,47 +95,47 @@ describe("JavaSet bulk operations", () => {
 
   it("addAll does not stop at the first successful add", () => {
     // regression guard: `changed = changed || this.add(v)` would short-circuit and skip the rest
-    const set = new JavaSet<number>();
+    const set = new Set<number>();
     set.addAll([1, 2, 3]);
     assert.equal(set.size(), 3);
   });
 
   it("containsAll checks every element", () => {
-    const set = new JavaSet<number>([1, 2, 3]);
+    const set = new Set<number>([1, 2, 3]);
     assert.equal(set.containsAll([1, 3]), true);
     assert.equal(set.containsAll([1, 4]), false);
     assert.equal(set.containsAll([]), true);
   });
 
   it("removeAll drops the intersection and reports change", () => {
-    const set = new JavaSet<number>([1, 2, 3]);
+    const set = new Set<number>([1, 2, 3]);
     assert.equal(set.removeAll([2, 9]), true);
     assert.deepEqual(set.toArray(), [1, 3]);
     assert.equal(set.removeAll([9]), false);
   });
 
   it("retainAll keeps only the intersection", () => {
-    const set = new JavaSet<number>([1, 2, 3, 4]);
+    const set = new Set<number>([1, 2, 3, 4]);
     assert.equal(set.retainAll([2, 4, 6]), true);
     assert.deepEqual(set.toArray(), [2, 4]);
     assert.equal(set.retainAll([2, 4]), false);
   });
 
   it("retainAll on a disjoint collection empties the set", () => {
-    const set = new JavaSet<number>([1, 2]);
+    const set = new Set<number>([1, 2]);
     assert.equal(set.retainAll([9]), true);
     assert.equal(set.isEmpty(), true);
   });
 
   it("bulk operations respect equality, not identity", () => {
-    const set = new JavaSet<Point>([new Point(1, 2), new Point(3, 4)]);
+    const set = new Set<Point>([new Point(1, 2), new Point(3, 4)]);
     assert.equal(set.containsAll([new Point(1, 2)]), true);
     set.removeAll([new Point(1, 2)]);
     assert.deepEqual(set.toArray().map(String), ["(3,4)"]);
   });
 
   it("clear empties the set, and it still works afterwards", () => {
-    const set = new JavaSet<number>([1, 2]);
+    const set = new Set<number>([1, 2]);
     set.clear();
     assert.equal(set.size(), 0);
     assert.equal(set.contains(1), false);
@@ -144,32 +144,32 @@ describe("JavaSet bulk operations", () => {
   });
 });
 
-describe("JavaSet iteration", () => {
+describe("Set iteration", () => {
   it("iterates in insertion order", () => {
-    const set = new JavaSet<string>(["z", "a", "m"]);
+    const set = new Set<string>(["z", "a", "m"]);
     assert.deepEqual([...set], ["z", "a", "m"]);
     assert.deepEqual(set.toArray(), ["z", "a", "m"]);
   });
 
   it("does not reorder when an existing member is re-added", () => {
-    const set = new JavaSet<string>(["a", "b", "c"]);
+    const set = new Set<string>(["a", "b", "c"]);
     set.add("a");
     assert.deepEqual(set.toArray(), ["a", "b", "c"]);
   });
 
   it("round-trips through its own constructor", () => {
-    const set = new JavaSet<Point>([new Point(1, 2), new Point(3, 4)]);
-    const copy = new JavaSet<Point>(set);
+    const set = new Set<Point>([new Point(1, 2), new Point(3, 4)]);
+    const copy = new Set<Point>(set);
     assert.equal(copy.equals(set), true);
   });
 
   it("builds from a plain JavaScript Set", () => {
-    const set = new JavaSet<number>(new Set([1, 2, 2, 3]));
+    const set = new Set<number>(new globalThis.Set([1, 2, 2, 3]));
     assert.equal(set.size(), 3);
   });
 
   it("forEach visits every member", () => {
-    const set = new JavaSet<number>([1, 2, 3]);
+    const set = new Set<number>([1, 2, 3]);
     const seen: number[] = [];
     let sawSelf = false;
     set.forEach((value, self) => {
@@ -181,92 +181,92 @@ describe("JavaSet iteration", () => {
   });
 
   it("iterating an empty set yields nothing", () => {
-    assert.deepEqual([...new JavaSet<number>()], []);
+    assert.deepEqual([...new Set<number>()], []);
   });
 });
 
-describe("JavaSet.equals and hashCode", () => {
+describe("Set.equals and hashCode", () => {
   it("compares by content, independent of insertion order", () => {
-    const a = new JavaSet<number>([1, 2, 3]);
-    const b = new JavaSet<number>([3, 1, 2]);
+    const a = new Set<number>([1, 2, 3]);
+    const b = new Set<number>([3, 1, 2]);
     assert.equal(a.equals(b), true);
     assert.equal(b.equals(a), true);
     assert.equal(a.hashCode(), b.hashCode());
   });
 
   it("is unequal on differing size or members", () => {
-    const base = new JavaSet<number>([1, 2]);
-    assert.equal(base.equals(new JavaSet<number>([1])), false);
-    assert.equal(base.equals(new JavaSet<number>([1, 2, 3])), false);
-    assert.equal(base.equals(new JavaSet<number>([1, 3])), false);
+    const base = new Set<number>([1, 2]);
+    assert.equal(base.equals(new Set<number>([1])), false);
+    assert.equal(base.equals(new Set<number>([1, 2, 3])), false);
+    assert.equal(base.equals(new Set<number>([1, 3])), false);
   });
 
   it("is reflexive, and empty sets are equal", () => {
-    const a = new JavaSet<number>();
+    const a = new Set<number>();
     assert.equal(a.equals(a), true);
-    assert.equal(a.equals(new JavaSet<number>()), true);
+    assert.equal(a.equals(new Set<number>()), true);
     assert.equal(a.hashCode(), 0);
   });
 
   it("compares members by equality", () => {
-    const a = new JavaSet<Point>([new Point(1, 2)]);
-    const b = new JavaSet<Point>([new Point(1, 2)]);
+    const a = new Set<Point>([new Point(1, 2)]);
+    const b = new Set<Point>([new Point(1, 2)]);
     assert.equal(a.equals(b), true);
     assert.equal(a.hashCode(), b.hashCode());
   });
 
   it("returns false, and does not throw, for non-set arguments", () => {
-    const set = new JavaSet<number>([1]);
-    for (const other of [null, undefined, 1, "1", true, {}, [1], new Set([1]), new JavaMap([[1, true]])]) {
+    const set = new Set<number>([1]);
+    for (const other of [null, undefined, 1, "1", true, {}, [1], new globalThis.Set([1]), new globalThis.Map([[1, true]])]) {
       assert.equal(set.equals(other), false, `expected false for ${String(other)}`);
     }
   });
 
   it("returns false, and does not throw, for a forged set carrying no private state", () => {
-    const forged = Object.create(JavaSet.prototype);
+    const forged = Object.create(Set.prototype);
     let result: boolean | undefined;
     assert.doesNotThrow(() => {
-      result = new JavaSet<number>([1]).equals(forged);
+      result = new Set<number>([1]).equals(forged);
     });
     assert.equal(result, false);
   });
 
-  it("works as a member of another JavaSet", () => {
-    const outer = new JavaSet<JavaSet<number>>();
-    outer.add(new JavaSet<number>([1, 2]));
-    outer.add(new JavaSet<number>([2, 1]));
+  it("works as a member of another Set", () => {
+    const outer = new Set<Set<number>>();
+    outer.add(new Set<number>([1, 2]));
+    outer.add(new Set<number>([2, 1]));
     assert.equal(outer.size(), 1);
-    assert.equal(outer.contains(new JavaSet<number>([1, 2])), true);
+    assert.equal(outer.contains(new Set<number>([1, 2])), true);
   });
 
-  it("works as a JavaMap key", () => {
-    const map = new JavaMap<JavaSet<number>, string>();
-    map.put(new JavaSet<number>([1, 2]), "pair");
-    assert.equal(map.get(new JavaSet<number>([2, 1])), "pair");
+  it("works as a Map key", () => {
+    const map = new Map<Set<number>, string>();
+    map.put(new Set<number>([1, 2]), "pair");
+    assert.equal(map.get(new Set<number>([2, 1])), "pair");
   });
 });
 
-describe("JavaSet.toString", () => {
+describe("Set.toString", () => {
   it("matches Java's AbstractCollection format", () => {
-    assert.equal(new JavaSet<number>().toString(), "[]");
-    assert.equal(new JavaSet<number>([1, 2, 3]).toString(), "[1, 2, 3]");
+    assert.equal(new Set<number>().toString(), "[]");
+    assert.equal(new Set<number>([1, 2, 3]).toString(), "[1, 2, 3]");
   });
 
   it("uses the member's own toString", () => {
-    assert.equal(new JavaSet<Point>([new Point(1, 2)]).toString(), "[(1,2)]");
+    assert.equal(new Set<Point>([new Point(1, 2)]).toString(), "[(1,2)]");
   });
 });
 
-describe("JavaSet in the collection hierarchy", () => {
-  it("is a JavaAbstractSet and a JavaCollection", () => {
-    const set = new JavaSet<number>([1]);
-    assert.ok(set instanceof JavaAbstractSet);
-    assert.ok(set instanceof JavaCollection);
+describe("Set in the collection hierarchy", () => {
+  it("is a AbstractSet and a Collection", () => {
+    const set = new Set<number>([1]);
+    assert.ok(set instanceof AbstractSet);
+    assert.ok(set instanceof Collection);
   });
 
   it("inherits the bulk operations rather than reimplementing them", () => {
-    // they now live on JavaCollection; this just confirms the reparenting did not lose any
-    const set = new JavaSet<number>([1, 2, 3]);
+    // they now live on Collection; this just confirms the reparenting did not lose any
+    const set = new Set<number>([1, 2, 3]);
     assert.equal(set.containsAll([1, 2]), true);
     assert.equal(set.addAll([4]), true);
     assert.equal(set.removeAll([1]), true);
@@ -274,19 +274,19 @@ describe("JavaSet in the collection hierarchy", () => {
   });
 
   it("keeps its own retainAll, which hashes rather than scanning", () => {
-    const set = new JavaSet<Point>([new Point(1, 2), new Point(3, 4)]);
+    const set = new Set<Point>([new Point(1, 2), new Point(3, 4)]);
     assert.equal(set.retainAll([new Point(3, 4)]), true);
     assert.deepEqual(set.toArray().map(String), ["(3,4)"]);
   });
 
   it("is not equal to a list holding the same elements", () => {
-    assert.equal(new JavaSet<number>([1, 2]).equals(new JavaList<number>([1, 2])), false);
+    assert.equal(new Set<number>([1, 2]).equals(new List<number>([1, 2])), false);
   });
 });
 
-describe("JavaSet fail-fast iteration", () => {
+describe("Set fail-fast iteration", () => {
   it("throws when a member is added mid-iteration", () => {
-    const set = new JavaSet<number>([1, 2, 3]);
+    const set = new Set<number>([1, 2, 3]);
     assert.throws(() => {
       for (const _value of set) {
         set.add(99);
@@ -295,7 +295,7 @@ describe("JavaSet fail-fast iteration", () => {
   });
 
   it("throws when a member is removed mid-iteration", () => {
-    const set = new JavaSet<number>([1, 2, 3]);
+    const set = new Set<number>([1, 2, 3]);
     assert.throws(() => {
       for (const value of set) {
         if (value === 1) {
@@ -306,21 +306,21 @@ describe("JavaSet fail-fast iteration", () => {
   });
 
   it("does not trip when a bulk operation snapshots first", () => {
-    const set = new JavaSet<number>([1, 2, 3]);
+    const set = new Set<number>([1, 2, 3]);
     assert.doesNotThrow(() => set.removeAll(set));
     assert.equal(set.isEmpty(), true);
   });
 
   it("does not trip on retainAll, which also snapshots", () => {
-    const set = new JavaSet<number>([1, 2, 3]);
+    const set = new Set<number>([1, 2, 3]);
     assert.doesNotThrow(() => set.retainAll([2]));
     assert.deepEqual(set.toArray(), [2]);
   });
 });
 
-describe("JavaSet immutability", () => {
-  it("JavaSet.of refuses every mutator but allows every read", () => {
-    const set = JavaSet.of(1, 2);
+describe("Set immutability", () => {
+  it("Set.of refuses every mutator but allows every read", () => {
+    const set = Set.of(1, 2);
     assert.equal(set.contains(1), true);
     assert.equal(set.size(), 2);
     assert.deepEqual([...set], [1, 2]);
@@ -330,8 +330,8 @@ describe("JavaSet immutability", () => {
   });
 
   it("unmodifiable is a live view of the original", () => {
-    const base = new JavaSet<number>([1]);
-    const view = JavaSet.unmodifiable(base);
+    const base = new Set<number>([1]);
+    const view = Set.unmodifiable(base);
     base.add(2);
     assert.deepEqual(view.toArray(), [1, 2]);
     assert.throws(() => view.add(3), UnsupportedOperationException);

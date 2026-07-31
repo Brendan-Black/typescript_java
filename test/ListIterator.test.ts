@@ -1,16 +1,16 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { unmodifiableList } from "../src/collections/Collections.js";
-import { JavaList } from "../src/collections/JavaList.js";
+import { List } from "../src/collections/List.js";
 import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
 import { IllegalStateException } from "../src/exceptions/IllegalStateException.js";
 import { IndexOutOfBoundsException } from "../src/exceptions/IndexOutOfBoundsException.js";
 import { NoSuchElementException } from "../src/exceptions/NoSuchElementException.js";
 import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
 
-const letters = (): JavaList<string> => new JavaList<string>(["a", "b", "c"]);
+const letters = (): List<string> => new List<string>(["a", "b", "c"]);
 
-describe("JavaListIterator positions", () => {
+describe("ListIterator positions", () => {
   it("starts at the front, between nothing and the first element", () => {
     const it = letters().listIterator();
     assert.equal(it.nextIndex(), 0);
@@ -74,7 +74,7 @@ describe("JavaListIterator positions", () => {
   });
 });
 
-describe("JavaListIterator.set", () => {
+describe("ListIterator.set", () => {
   it("replaces the element last returned by next", () => {
     const list = letters();
     const it = list.listIterator();
@@ -131,7 +131,7 @@ describe("JavaListIterator.set", () => {
   });
 });
 
-describe("JavaListIterator.add", () => {
+describe("ListIterator.add", () => {
   it("inserts at the cursor and steps over what it inserted", () => {
     const list = letters();
     const it = list.listIterator();
@@ -160,7 +160,7 @@ describe("JavaListIterator.add", () => {
   });
 
   it("can insert mid-walk without upsetting it, which a for...of loop cannot", () => {
-    const list = new JavaList<string>(["a", "c"]);
+    const list = new List<string>(["a", "c"]);
     const it = list.listIterator();
     while (it.hasNext()) {
       if (it.next() === "a") {
@@ -171,7 +171,7 @@ describe("JavaListIterator.add", () => {
   });
 
   it("needs no preceding next, unlike set and remove", () => {
-    const list = new JavaList<string>();
+    const list = new List<string>();
     const it = list.listIterator();
     it.add("only");
     assert.deepEqual(list.toArray(), ["only"]);
@@ -187,7 +187,7 @@ describe("JavaListIterator.add", () => {
   });
 });
 
-describe("JavaListIterator.remove", () => {
+describe("ListIterator.remove", () => {
   it("removes what next returned, and keeps the walk in step", () => {
     const list = letters();
     const it = list.listIterator();
@@ -208,7 +208,7 @@ describe("JavaListIterator.remove", () => {
   });
 
   it("strips a list walked backwards", () => {
-    const list = new JavaList<number>([1, 2, 3, 4]);
+    const list = new List<number>([1, 2, 3, 4]);
     const it = list.listIterator(list.size());
     while (it.hasPrevious()) {
       if (it.previous() % 2 === 0) {
@@ -227,7 +227,7 @@ describe("JavaListIterator.remove", () => {
   });
 });
 
-describe("JavaListIterator fail-fast", () => {
+describe("ListIterator fail-fast", () => {
   it("does not trip on its own writes", () => {
     const list = letters();
     const it = list.listIterator();
@@ -279,7 +279,7 @@ describe("JavaListIterator fail-fast", () => {
   });
 });
 
-describe("JavaListIterator on an unmodifiable list", () => {
+describe("ListIterator on an unmodifiable list", () => {
   it("still walks in both directions", () => {
     const view = unmodifiableList(letters());
     const it = view.listIterator(view.size());
@@ -312,7 +312,7 @@ describe("JavaListIterator on an unmodifiable list", () => {
   });
 });
 
-describe("JavaList.iterator is the forward half of the same cursor", () => {
+describe("List.iterator is the forward half of the same cursor", () => {
   it("walks and removes as before", () => {
     const list = letters();
     const it = list.iterator();

@@ -385,7 +385,7 @@ export function intoChildText<T>(name: string, text?: XmlTextWriter<T>): XmlPart
  * One child element per value, all under the same name, in order.
  *
  * A repeated element is how XML writes a collection and none of them is how it writes an empty one, so an empty
- * source writes nothing at all. Anything iterable will do — a {@link JavaList} read out of a document, or the
+ * source writes nothing at all. Anything iterable will do — a {@link List} read out of a document, or the
  * array a caller happened to have. Each element gets its own XPath index, 1-based: `/order/item[2]`.
  */
 export function intoChildren<T>(name: string, writer: XmlWriter<T>): XmlPart<Iterable<T>> {

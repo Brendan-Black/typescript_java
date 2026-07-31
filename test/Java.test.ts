@@ -2,37 +2,37 @@ import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { Java } from "../src/index.js";
 import * as root from "../src/index.js";
-import { JavaAbstractMap, JavaMapEntry } from "../src/collections/JavaAbstractMap.js";
+import { AbstractMap, MapEntry } from "../src/collections/AbstractMap.js";
 import { binarySearch, sort } from "../src/collections/Collections.js";
-import { JavaList } from "../src/collections/JavaList.js";
-import { JavaMap } from "../src/collections/JavaMap.js";
-import { JavaSet } from "../src/collections/JavaSet.js";
+import { List } from "../src/collections/List.js";
+import { Map } from "../src/collections/Map.js";
+import { Set } from "../src/collections/Set.js";
 import { TreeMap } from "../src/collections/TreeMap.js";
 import { compareOf } from "../src/fundamentals/Comparable.js";
 import { comparator, naturalOrder } from "../src/fundamentals/Comparator.js";
 import { equalsOf, hashAll, hashCodeOf } from "../src/fundamentals/Hashing.js";
-import { JavaObject } from "../src/fundamentals/Object.js";
+import { _Object } from "../src/fundamentals/Object.js";
 import { requireNonNull } from "../src/fundamentals/Objects.js";
 import { Optional } from "../src/fundamentals/Optional.js";
-import { TSJavaException } from "../src/exceptions/TSJavaException.js";
+import { Throwable } from "../src/exceptions/Throwable.js";
 
 /**
- * The namespace renames its bindings at the boundary rather than wrapping them, so every one of these is an
- * identity check rather than a behavioural one. If they hold, `Java.X` cannot drift from the class the module
- * declares: there is only one of it. The declarations keep their prefixed names because a class declared
- * `Map` or `Object` would shadow, inside its own module, the global it is implemented on top of.
+ * The namespace re-exports its bindings rather than wrapping them, so every one of these is an identity check
+ * rather than a behavioural one. If they hold, `Java.X` cannot drift from the class the module declares: there
+ * is only one of it. The classes are declared under Java's own names too, reaching any global they shadow
+ * through `globalThis` — `_Object` alone is spelled differently, because TypeScript refuses `class Object`.
  */
 describe("Java namespace identity", () => {
   it("names the declared class itself, not a copy of it", () => {
-    assert.equal(Java.Object, JavaObject);
-    assert.equal(Java.Map, JavaMap);
-    assert.equal(Java.Set, JavaSet);
-    assert.equal(Java.List, JavaList);
-    assert.equal(Java.AbstractMap, JavaAbstractMap);
-    assert.equal(Java.MapEntry, JavaMapEntry);
+    assert.equal(Java.Object, _Object);
+    assert.equal(Java.Map, Map);
+    assert.equal(Java.Set, Set);
+    assert.equal(Java.List, List);
+    assert.equal(Java.AbstractMap, AbstractMap);
+    assert.equal(Java.MapEntry, MapEntry);
     assert.equal(Java.TreeMap, TreeMap);
     assert.equal(Java.Optional, Optional);
-    assert.equal(Java.Throwable, TSJavaException);
+    assert.equal(Java.Throwable, Throwable);
   });
 
   it("keeps instanceof working through the namespace", () => {
@@ -42,9 +42,12 @@ describe("Java namespace identity", () => {
     assert.ok(map instanceof Java.Object);
   });
 
-  it("leaves constructor.name alone, so toString() is unchanged", () => {
-    // the classes are renamed at the namespace boundary only; the declarations keep their prefixed names
-    assert.equal(Java.Map.name, "JavaMap");
+  it("carries Java's own name through to constructor.name", () => {
+    // the declaration is `class Map`, so this is the name toString() and a stack trace both show
+    assert.equal(Java.Map.name, "Map");
+    assert.equal(Java.List.name, "List");
+    // except the one the compiler will not allow to be named `Object`
+    assert.equal(Java.Object.name, "_Object");
     assert.match(new Java.Map<string, number>().toString(), /^\{\}$/);
     assert.match(new (class Point extends Java.Object {})().toString(), /^Point@[0-9a-f]+$/);
   });
@@ -190,10 +193,10 @@ describe("Java namespace surface", () => {
   });
 
   it("reaches the standard library only through Java.*", () => {
-    // the flat, prefixed spellings are gone from the package root; the namespace is the only way in
+    // nothing with a Java counterpart is a top-level export; the namespace is the only way in
     const removed = [
-      "JavaObject", "JavaCollection", "JavaAbstractSet", "JavaAbstractMap", "JavaMapEntry", "JavaList",
-      "JavaMap", "JavaSet", "TreeMap", "TreeSet", "Optional", "TSJavaException", "RuntimeException",
+      "_Object", "Collection", "AbstractSet", "AbstractMap", "MapEntry", "List",
+      "Map", "Set", "TreeMap", "TreeSet", "Optional", "Throwable", "RuntimeException",
       "ClassCastException", "ConcurrentModificationException", "IllegalArgumentException",
       "IllegalStateException", "IndexOutOfBoundsException", "NoSuchElementException",
       "NotImplementedException", "NullPointerException", "UnsupportedOperationException",

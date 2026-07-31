@@ -1,4 +1,4 @@
-import { TSJavaException } from "./TSJavaException.js";
+import { Throwable } from "./Throwable.js";
 
 /**
  * Java's `RuntimeException`: the parent of every unchecked exception in the language, and so the parent of
@@ -7,7 +7,7 @@ import { TSJavaException } from "./TSJavaException.js";
  * Catch this to catch anything the library raises without also catching an unrelated failure from elsewhere
  * in your program.
  */
-export class RuntimeException extends TSJavaException {
+export class RuntimeException extends Throwable {
   constructor(message?: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "RuntimeException";

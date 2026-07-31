@@ -2,14 +2,14 @@ import { ConcurrentModificationException } from "../exceptions/ConcurrentModific
 import { IndexOutOfBoundsException } from "../exceptions/IndexOutOfBoundsException.js";
 import { equalsOf, hashCodeOf } from "../fundamentals/Hashing.js";
 import { elementAt } from "../fundamentals/Indexing.js";
-import { JavaObject } from "../fundamentals/Object.js";
+import { _Object } from "../fundamentals/Object.js";
 import { Optional } from "../fundamentals/Optional.js";
-import { JavaCollection, unsupported } from "./JavaCollection.js";
-import { type JavaIterator, type JavaListIterator, listIteratorOver } from "./JavaIterator.js";
+import { Collection, unsupported } from "./Collection.js";
+import { type Iterator, type ListIterator, listIteratorOver } from "./Iterator.js";
 
 /**
  * The mutable innards, held behind one reference so an unmodifiable view can share them and stay live.
- * See {@link JavaList.unmodifiable}.
+ * See {@link List.unmodifiable}.
  */
 interface ListState<T> {
   items: T[];
@@ -29,13 +29,13 @@ interface ListState<T> {
  * collapse the moment `T` is `number` — so removal by position is {@link removeAt} and removal by value is
  * {@link remove}. Same split for {@link addAt} and {@link add}.
  */
-export class JavaList<T> extends JavaCollection<T> {
+export class List<T> extends Collection<T> {
   #state: ListState<T>;
   #readOnly = false;
 
   /**
-   * @param values initial contents, in order. Accepts anything iterable — an array, another JavaList, a
-   * JavaSet, a plain JavaScript Set.
+   * @param values initial contents, in order. Accepts anything iterable — an array, another List, a
+   * Set, a plain JavaScript Set.
    */
   constructor(values?: Iterable<T>) {
     super();
@@ -47,8 +47,8 @@ export class JavaList<T> extends JavaCollection<T> {
    *
    * A frozen copy rather than a view — the arguments are values, so there is nothing to stay live against.
    */
-  public static of<T>(...values: readonly T[]): JavaList<T> {
-    const list = new JavaList<T>(values);
+  public static of<T>(...values: readonly T[]): List<T> {
+    const list = new List<T>(values);
     list.#readOnly = true;
     return list;
   }
@@ -60,8 +60,8 @@ export class JavaList<T> extends JavaCollection<T> {
    * behaviour and the usual source of surprise with it: handing out an unmodifiable view protects you from
    * your caller, not your caller from you.
    */
-  public static unmodifiable<T>(list: JavaList<T>): JavaList<T> {
-    const view = new JavaList<T>();
+  public static unmodifiable<T>(list: List<T>): List<T> {
+    const view = new List<T>();
     view.#state = list.#state;
     view.#readOnly = true;
     return view;
@@ -89,7 +89,7 @@ export class JavaList<T> extends JavaCollection<T> {
    */
   public get(index: number): T {
     this.#requireInRange(index);
-    return elementAt(this.#state.items, index, "JavaList.get");
+    return elementAt(this.#state.items, index, "List.get");
   }
 
   /** The bounds-checked read as an Optional, for when an absent index is an ordinary outcome rather than a bug. */
@@ -107,7 +107,7 @@ export class JavaList<T> extends JavaCollection<T> {
   public set(index: number, value: T): T {
     this.#requireMutable("set");
     this.#requireInRange(index);
-    const previous = elementAt(this.#state.items, index, "JavaList.set");
+    const previous = elementAt(this.#state.items, index, "List.set");
     // not a structural change, so modCount is deliberately left alone — Java treats replacement the same way
     this.#state.items[index] = value;
     return previous;
@@ -143,7 +143,7 @@ export class JavaList<T> extends JavaCollection<T> {
     this.#requireMutable("removeAt");
     this.#requireInRange(index);
     this.#state.modCount++;
-    return elementAt(this.#state.items.splice(index, 1), 0, "JavaList.removeAt");
+    return elementAt(this.#state.items.splice(index, 1), 0, "List.removeAt");
   }
 
   /**
@@ -201,11 +201,11 @@ export class JavaList<T> extends JavaCollection<T> {
    * @param from inclusive
    * @param to exclusive, defaulting to the end
    */
-  public subList(from: number, to: number = this.#state.items.length): JavaList<T> {
+  public subList(from: number, to: number = this.#state.items.length): List<T> {
     if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to > this.#state.items.length || from > to) {
       throw new IndexOutOfBoundsException(`Range [${from}, ${to}) out of bounds for length ${this.#state.items.length}`);
     }
-    return new JavaList<T>(this.#state.items.slice(from, to));
+    return new List<T>(this.#state.items.slice(from, to));
   }
 
   /**
@@ -218,7 +218,7 @@ export class JavaList<T> extends JavaCollection<T> {
    * Sorting positions rather than elements looks like indirection for its own sake, but it is the only way to
    * honour the comparator on every element. `Array.prototype.sort` special-cases `undefined`: it hoists those
    * entries to the end and never shows them to the comparator at all, so a {@link nullsFirst} comparator over a
-   * `JavaList<string | undefined>` would be quietly overruled. Positions are numbers, so nothing is hidden from
+   * `List<string | undefined>` would be quietly overruled. Positions are numbers, so nothing is hidden from
    * the comparator here.
    */
   public sort(comparator: (a: T, b: T) => number): void {
@@ -226,16 +226,16 @@ export class JavaList<T> extends JavaCollection<T> {
     const items = this.#state.items;
     const order = items.map((_, index) => index);
     order.sort((left, right) =>
-      comparator(elementAt(items, left, "JavaList.sort"), elementAt(items, right, "JavaList.sort")),
+      comparator(elementAt(items, left, "List.sort"), elementAt(items, right, "List.sort")),
     );
-    this.#state.items = order.map((index) => elementAt(items, index, "JavaList.sort"));
+    this.#state.items = order.map((index) => elementAt(items, index, "List.sort"));
     this.#state.modCount++;
   }
 
   public replaceAll(operator: (value: T, index: number) => T): void {
     this.#requireMutable("replaceAll");
     for (let i = 0; i < this.#state.items.length; i++) {
-      this.#state.items[i] = operator(elementAt(this.#state.items, i, "JavaList.replaceAll"), i);
+      this.#state.items[i] = operator(elementAt(this.#state.items, i, "List.replaceAll"), i);
     }
   }
 
@@ -249,7 +249,7 @@ export class JavaList<T> extends JavaCollection<T> {
       if (this.#state.modCount !== expected) {
         throw new ConcurrentModificationException("The list was modified while it was being iterated.");
       }
-      yield elementAt(this.#state.items, i, "JavaList iterator");
+      yield elementAt(this.#state.items, i, "List iterator");
     }
   }
 
@@ -260,25 +260,25 @@ export class JavaList<T> extends JavaCollection<T> {
    * the same machinery as reading it both. Removal is by position, so a list holding two `equals` elements loses
    * the one the cursor is standing on, where {@link removeIf} can only ask for a value and gets the first match.
    */
-  public override iterator(): JavaIterator<T> {
+  public override iterator(): Iterator<T> {
     return this.listIterator();
   }
 
   /**
-   * Java's `List.listIterator()`: a cursor that also runs backwards and can write. See {@link JavaListIterator}.
+   * Java's `List.listIterator()`: a cursor that also runs backwards and can write. See {@link ListIterator}.
    *
    * @param index where to start, between elements — `0` at the front, {@link size} at the back, ready to walk
    * the list in reverse. Defaults to the front.
    * @throws {@link IndexOutOfBoundsException} unless `0 <= index <= size`
    */
-  public listIterator(index: number = 0): JavaListIterator<T> {
+  public listIterator(index: number = 0): ListIterator<T> {
     if (!Number.isInteger(index) || index < 0 || index > this.#state.items.length) {
       throw new IndexOutOfBoundsException(`Index ${index} out of bounds for length ${this.#state.items.length}`);
     }
     return listIteratorOver<T>(
       {
         size: () => this.#state.items.length,
-        get: (at) => elementAt(this.#state.items, at, "JavaList.listIterator"),
+        get: (at) => elementAt(this.#state.items, at, "List.listIterator"),
         replace: (at, value) => {
           this.set(at, value);
         },
@@ -305,10 +305,10 @@ export class JavaList<T> extends JavaCollection<T> {
     if (this === other) {
       return true;
     }
-    if (!JavaObject.isInstance(other) || !(other instanceof JavaList)) {
+    if (!_Object.isInstance(other) || !(other instanceof List)) {
       return false;
     }
-    const otherList = other as JavaList<T>;
+    const otherList = other as List<T>;
     if (this.size() !== otherList.size()) {
       return false;
     }

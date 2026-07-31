@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { JavaMap } from "../src/collections/JavaMap.js";
+import { Map } from "../src/collections/Map.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { NoSuchElementException } from "../src/exceptions/NoSuchElementException.js";
 import { NotImplementedException } from "../src/exceptions/NotImplementedException.js";
@@ -157,7 +157,7 @@ describe("Optional unwrapping", () => {
   });
 
   it("orElseThrow accepts any Error, not just this library's hierarchy", () => {
-    // regression: the supplier was constrained to TSJavaException, so an application could not throw its own
+    // regression: the supplier was constrained to Throwable, so an application could not throw its own
     // domain error without reparenting it onto this library. Java's bound is Throwable.
     class UserNotFound extends Error {
       constructor(public readonly id: string) {
@@ -393,7 +393,7 @@ describe("Optional serialization", () => {
   });
 
   it("composes with a value that is itself serialisable", () => {
-    const map = new JavaMap<string, number>([["a", 1]]);
+    const map = new Map<string, number>([["a", 1]]);
     assert.equal(JSON.stringify(Optional.of(map)), '[["a",1]]');
   });
 

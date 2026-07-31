@@ -1,9 +1,9 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { equalsOf, hashAll, hashCodeOf } from "../src/fundamentals/Hashing.js";
-import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
+import { boilerplateEqualityCheck, _Object } from "../src/fundamentals/Object.js";
 
-class Point extends JavaObject {
+class Point extends _Object {
   constructor(public readonly x: number, public readonly y: number) {
     super();
   }
@@ -72,7 +72,7 @@ describe("hashCodeOf", () => {
     assert.notEqual(hashCodeOf(123n), hashCodeOf(124n));
   });
 
-  it("defers to a JavaObject's own hashCode", () => {
+  it("defers to a `Java.Object`'s own hashCode", () => {
     const point = new Point(3, 4);
     assert.equal(hashCodeOf(point), point.hashCode());
     assert.equal(hashCodeOf(new Point(3, 4)), hashCodeOf(new Point(3, 4)));
@@ -128,7 +128,7 @@ describe("equalsOf", () => {
     assert.equal(equalsOf(undefined, null), false);
   });
 
-  it("defers to a JavaObject's own equals", () => {
+  it("defers to a `Java.Object`'s own equals", () => {
     assert.equal(equalsOf(new Point(1, 2), new Point(1, 2)), true);
     assert.equal(equalsOf(new Point(1, 2), new Point(1, 3)), false);
   });

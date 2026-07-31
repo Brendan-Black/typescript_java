@@ -7,7 +7,7 @@ import { NullPointerException } from "../exceptions/NullPointerException.js";
  * Implement it the same way you implement `equals` and `hashCode` — from the fields that define the value:
  *
  * ```ts
- * class Money extends JavaObject implements Comparable<Money> {
+ * class Money extends _Object implements Comparable<Money> {
  *   constructor(public readonly cents: number) { super(); }
  *   public compareTo(other: Money): number {
  *     return this.cents - other.cents;
@@ -94,7 +94,7 @@ function compareDoubles(a: number, b: number): number {
 }
 
 /**
- * Duck-typed, unlike {@link hashCodeOf}'s `instanceof JavaObject` check, and deliberately so: `Comparable` is an
+ * Duck-typed, unlike {@link hashCodeOf}'s `instanceof _Object` check, and deliberately so: `Comparable` is an
  * interface rather than a base class, so there is no constructor to have run and no private field to look for. A
  * stray `compareTo` property is also a far less likely accident than a stray `hashCode` — it is not a name
  * anything in the JavaScript standard library uses.

@@ -1,10 +1,10 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { JavaList } from "../src/collections/JavaList.js";
+import { List } from "../src/collections/List.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { XmlBindException } from "../src/exceptions/XmlBindException.js";
 import { XmlParseException } from "../src/exceptions/XmlParseException.js";
-import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
+import { boilerplateEqualityCheck, _Object } from "../src/fundamentals/Object.js";
 import { hashAll } from "../src/fundamentals/Hashing.js";
 import { Optional } from "../src/fundamentals/Optional.js";
 import { parseXml, XmlElement } from "../src/serialization/XmlParser.js";
@@ -49,7 +49,7 @@ interface Order {
   priority: Priority;
   total: Money;
   note: Optional<string>;
-  items: JavaList<Item>;
+  items: List<Item>;
   paid: boolean;
 }
 
@@ -186,7 +186,7 @@ describe("XmlReader fields", () => {
   });
 
   it("reads repeated children, in order, and none as an empty list", () => {
-    const reader = elementOf<{ skus: JavaList<string> }>({ skus: children("item", textElement()) });
+    const reader = elementOf<{ skus: List<string> }>({ skus: children("item", textElement()) });
     assert.deepEqual([...readXml("<order><item>hat</item><item>scarf</item></order>", reader).skus], [
       "hat",
       "scarf",
@@ -195,7 +195,7 @@ describe("XmlReader fields", () => {
   });
 
   it("reads a wrapped collection, and an absent wrapper as empty", () => {
-    const reader = elementOf<{ skus: JavaList<string> }>({ skus: wrappedChildren("items", "item", textElement()) });
+    const reader = elementOf<{ skus: List<string> }>({ skus: wrappedChildren("items", "item", textElement()) });
     assert.deepEqual([...readXml("<order><items><item>hat</item></items></order>", reader).skus], ["hat"]);
     assert.equal(readXml("<order/>", reader).skus.size(), 0);
     assert.equal(readXml("<order><items/></order>", reader).skus.size(), 0);
@@ -230,7 +230,7 @@ describe("XmlReader elements", () => {
   });
 
   it("builds a class through mappingElement rather than knowing about constructors", () => {
-    class Point extends JavaObject {
+    class Point extends _Object {
       constructor(
         public readonly x: number,
         public readonly y: number,
@@ -289,7 +289,7 @@ describe("readXml", () => {
   });
 
   it("indexes repeated elements from one, as XPath does", () => {
-    const reader = elementOf<{ items: JavaList<number> }>({ items: children("item", textElement(integerText)) });
+    const reader = elementOf<{ items: List<number> }>({ items: children("item", textElement(integerText)) });
     const error = bindFailure("<order><item>1</item><item>x</item></order>", reader);
     assert.equal(error.getPath(), "/order/item[2]");
   });

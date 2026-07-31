@@ -1,9 +1,9 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { unmodifiableList, unmodifiableMap, unmodifiableSet } from "../src/collections/Collections.js";
-import { JavaList } from "../src/collections/JavaList.js";
-import { JavaMap } from "../src/collections/JavaMap.js";
-import { JavaSet } from "../src/collections/JavaSet.js";
+import { List } from "../src/collections/List.js";
+import { Map } from "../src/collections/Map.js";
+import { Set } from "../src/collections/Set.js";
 import { TreeMap } from "../src/collections/TreeMap.js";
 import { TreeSet } from "../src/collections/TreeSet.js";
 import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
@@ -11,10 +11,10 @@ import { IllegalStateException } from "../src/exceptions/IllegalStateException.j
 import { NoSuchElementException } from "../src/exceptions/NoSuchElementException.js";
 import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
 
-const letters = (): JavaList<string> => new JavaList<string>(["a", "b", "c"]);
-const scores = (): JavaMap<string, number> => new JavaMap<string, number>([["a", 1], ["b", 2], ["c", 3]]);
+const letters = (): List<string> => new List<string>(["a", "b", "c"]);
+const scores = (): Map<string, number> => new Map<string, number>([["a", 1], ["b", 2], ["c", 3]]);
 
-describe("JavaIterator as a cursor", () => {
+describe("Iterator as a cursor", () => {
   it("walks with hasNext and next", () => {
     const it = letters().iterator();
     const seen: string[] = [];
@@ -26,13 +26,13 @@ describe("JavaIterator as a cursor", () => {
   });
 
   it("throws once exhausted rather than answering undefined", () => {
-    const it = new JavaList<string>(["only"]).iterator();
+    const it = new List<string>(["only"]).iterator();
     assert.equal(it.next(), "only");
     assert.throws(() => it.next(), NoSuchElementException);
   });
 
   it("is empty from the start for an empty collection", () => {
-    const it = new JavaList<string>().iterator();
+    const it = new List<string>().iterator();
     assert.equal(it.hasNext(), false);
     assert.throws(() => it.next(), NoSuchElementException);
   });
@@ -44,11 +44,11 @@ describe("JavaIterator as a cursor", () => {
   });
 
   it("can be handed straight to anything taking an Iterable", () => {
-    assert.deepEqual(new JavaList<string>(letters().iterator()).toArray(), ["a", "b", "c"]);
+    assert.deepEqual(new List<string>(letters().iterator()).toArray(), ["a", "b", "c"]);
   });
 });
 
-describe("JavaIterator.remove", () => {
+describe("Iterator.remove", () => {
   it("removes the element last returned", () => {
     const list = letters();
     const it = list.iterator();
@@ -84,7 +84,7 @@ describe("JavaIterator.remove", () => {
   });
 
   it("removes by position, so duplicates are told apart — which removeIf cannot do", () => {
-    const list = new JavaList<string>(["x", "dup", "dup", "y"]);
+    const list = new List<string>(["x", "dup", "dup", "y"]);
     const it = list.iterator();
     it.next();
     it.next();
@@ -93,13 +93,13 @@ describe("JavaIterator.remove", () => {
     it.remove();
     assert.deepEqual(list.toArray(), ["x", "dup", "y"]);
 
-    const byValue = new JavaList<string>(["x", "dup", "dup", "y"]);
+    const byValue = new List<string>(["x", "dup", "dup", "y"]);
     byValue.removeIf((value) => value === "dup");
     assert.deepEqual(byValue.toArray(), ["x", "y"]);
   });
 
   it("keeps its place across several removals, which shift everything behind them", () => {
-    const list = new JavaList<string>(["a", "b", "c", "d", "e"]);
+    const list = new List<string>(["a", "b", "c", "d", "e"]);
     const it = list.iterator();
     const seen: string[] = [];
     while (it.hasNext()) {
@@ -137,7 +137,7 @@ describe("JavaIterator.remove", () => {
   });
 });
 
-describe("JavaIterator fail-fast", () => {
+describe("Iterator fail-fast", () => {
   it("does not trip on its own removals", () => {
     const list = letters();
     const it = list.iterator();
@@ -171,9 +171,9 @@ describe("JavaIterator fail-fast", () => {
   });
 });
 
-describe("JavaIterator over sets", () => {
+describe("Iterator over sets", () => {
   it("removes from a hash set", () => {
-    const set = new JavaSet<string>(["a", "b", "c"]);
+    const set = new Set<string>(["a", "b", "c"]);
     const it = set.iterator();
     while (it.hasNext()) {
       if (it.next() === "b") {
@@ -201,7 +201,7 @@ describe("JavaIterator over sets", () => {
   });
 
   it("fails fast on a set modified behind its back", () => {
-    const set = new JavaSet<string>(["a", "b"]);
+    const set = new Set<string>(["a", "b"]);
     const it = set.iterator();
     it.next();
     set.add("c");
@@ -209,7 +209,7 @@ describe("JavaIterator over sets", () => {
   });
 });
 
-describe("JavaIterator over map views", () => {
+describe("Iterator over map views", () => {
   it("removes an entry through the key set", () => {
     const map = scores();
     const it = map.keySet().iterator();
@@ -229,7 +229,7 @@ describe("JavaIterator over map views", () => {
   });
 
   it("removes the entry the cursor is on through the values view, not the first equal value", () => {
-    const map = new JavaMap<string, number>([["a", 7], ["b", 7], ["c", 9]]);
+    const map = new Map<string, number>([["a", 7], ["b", 7], ["c", 9]]);
     const it = map.values().iterator();
     it.next();
     it.next();
@@ -237,7 +237,7 @@ describe("JavaIterator over map views", () => {
     assert.deepEqual(map.keySet().toArray(), ["a", "c"]);
 
     // the view's own remove(value) can only find the first entry holding it, which is Java's behaviour too
-    const byValue = new JavaMap<string, number>([["a", 7], ["b", 7], ["c", 9]]);
+    const byValue = new Map<string, number>([["a", 7], ["b", 7], ["c", 9]]);
     byValue.values().remove(7);
     assert.deepEqual(byValue.keySet().toArray(), ["b", "c"]);
   });
@@ -273,7 +273,7 @@ describe("JavaIterator over map views", () => {
   });
 });
 
-describe("JavaIterator on unmodifiable collections", () => {
+describe("Iterator on unmodifiable collections", () => {
   it("still walks", () => {
     assert.deepEqual([...unmodifiableList(letters()).iterator()], ["a", "b", "c"]);
   });
@@ -285,11 +285,11 @@ describe("JavaIterator on unmodifiable collections", () => {
   });
 
   it("refuses to remove from a set, and from one built by of()", () => {
-    const view = unmodifiableSet(new JavaSet<string>(["a"])).iterator();
+    const view = unmodifiableSet(new Set<string>(["a"])).iterator();
     view.next();
     assert.throws(() => view.remove(), UnsupportedOperationException);
 
-    const frozen = JavaSet.of<string>("a").iterator();
+    const frozen = Set.of<string>("a").iterator();
     frozen.next();
     assert.throws(() => frozen.remove(), UnsupportedOperationException);
 
@@ -317,7 +317,7 @@ describe("JavaIterator on unmodifiable collections", () => {
     // the collection cannot be removed from at all, which is the more useful answer than "you have not called
     // next() yet". A modifiable collection asked the same way gets the state complaint.
     assert.throws(() => unmodifiableList(letters()).iterator().remove(), UnsupportedOperationException);
-    assert.throws(() => JavaSet.of<string>("a").iterator().remove(), UnsupportedOperationException);
+    assert.throws(() => Set.of<string>("a").iterator().remove(), UnsupportedOperationException);
     assert.throws(() => letters().iterator().remove(), IllegalStateException);
   });
 });

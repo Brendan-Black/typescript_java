@@ -1,10 +1,9 @@
 /**
  * The `Java` namespace: this library's reimplementation of the standard library, under Java's own names.
  *
- * This is the only way in: the standard library is reachable through `Java.*` and nowhere else. The names are
- * renamed here at the boundary rather than wrapped, so nothing costs an indirection. A namespace is what lets
- * them be Java's own — `Object`, `Map`, `Set`, `List` and `Iterator` would otherwise collide with JavaScript's
- * globals at module scope:
+ * This is the only way in: the standard library is reachable through `Java.*` and nowhere else. Nothing here
+ * wraps anything, so no name costs an indirection. A namespace is what lets these be Java's own — `Object`,
+ * `Map`, `Set`, `List` and `Iterator` would otherwise collide with JavaScript's globals at the use site:
  *
  * ```ts
  * import { Java } from "typescript-java";
@@ -14,11 +13,12 @@
  * Java.Collections.sort(names);
  * ```
  *
- * The classes keep their prefixed *declaration* names and are renamed only here, at the boundary. That is
- * deliberate and not merely convenient: `collections/JavaMap.ts` stores its buckets in a real `Map` and
- * `fundamentals/Object.ts` calls the real `Object.getPrototypeOf`, so a class actually named `Map` or `Object`
- * would shadow the global it depends on. Aliasing at the boundary also leaves `constructor.name` alone, which
- * is what `JavaObject.toString()` prints — a `Java.Map` still renders as `JavaMap@1f45`.
+ * The classes are declared under these same names, so nothing is renamed on the way through. Where a class
+ * shadows the global it is built on — `collections/Map.ts` stores its buckets in a real `Map` — the module
+ * reaches that global through `globalThis` rather than taking a different name for itself.
+ *
+ * The one exception is {@link Object}, declared `_Object` because TypeScript refuses a class named `Object`
+ * (TS2725). It is renamed here, and only it.
  *
  * WHAT IS NOT HERE: anything without a `java.lang`, `java.util` or `java.io` counterpart. The serialization
  * layers model Jackson and JAXB rather than the standard library, and stay at the top level along with
@@ -32,7 +32,7 @@
 // java.lang
 // ---------------------------------------------------------------------------------------------------------
 
-export { JavaObject as Object } from "../fundamentals/Object.js";
+export { _Object as Object } from "../fundamentals/Object.js";
 export type { Comparable } from "../fundamentals/Comparable.js";
 /** No Java counterpart: the constraint `<T extends Comparable<? super T>>` states inline, named so it can be reused. */
 export type { NaturallyOrdered } from "../fundamentals/Comparable.js";
@@ -43,17 +43,17 @@ export type { NaturallyOrdered } from "../fundamentals/Comparable.js";
 
 export { Optional } from "../fundamentals/Optional.js";
 
-export { JavaCollection as Collection } from "../collections/JavaCollection.js";
-export { JavaAbstractSet as AbstractSet } from "../collections/JavaCollection.js";
-export { JavaAbstractMap as AbstractMap } from "../collections/JavaAbstractMap.js";
+export { Collection } from "../collections/Collection.js";
+export { AbstractSet } from "../collections/Collection.js";
+export { AbstractMap } from "../collections/AbstractMap.js";
 /** Java spells this `Map.Entry`; a nested name would mean making it a static of {@link Map}, which it is not. */
-export { JavaMapEntry as MapEntry } from "../collections/JavaAbstractMap.js";
-export { JavaList as List } from "../collections/JavaList.js";
-export { JavaSet as Set } from "../collections/JavaSet.js";
-export { JavaMap as Map } from "../collections/JavaMap.js";
+export { MapEntry } from "../collections/AbstractMap.js";
+export { List } from "../collections/List.js";
+export { Set } from "../collections/Set.js";
+export { Map } from "../collections/Map.js";
 export { TreeMap } from "../collections/TreeMap.js";
 export { TreeSet } from "../collections/TreeSet.js";
-export type { JavaIterator as Iterator, JavaListIterator as ListIterator } from "../collections/JavaIterator.js";
+export type { Iterator, ListIterator } from "../collections/Iterator.js";
 
 /** Both the `Comparator<T>` type and its statics, merged under one name. See {@link ./Comparator.js}. */
 export { Comparator } from "./Comparator.js";
@@ -84,7 +84,7 @@ export type { Serializable } from "../serialization/Serializable.js";
  * behaviour and the documented one; the name says which Java concept it stands in for, not that it has
  * Java's reach.
  */
-export { TSJavaException as Throwable } from "../exceptions/TSJavaException.js";
+export { Throwable } from "../exceptions/Throwable.js";
 export { RuntimeException } from "../exceptions/RuntimeException.js";
 export { ClassCastException } from "../exceptions/ClassCastException.js";
 export { ConcurrentModificationException } from "../exceptions/ConcurrentModificationException.js";

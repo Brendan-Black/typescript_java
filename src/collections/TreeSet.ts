@@ -1,7 +1,7 @@
 import { NoSuchElementException } from "../exceptions/NoSuchElementException.js";
 import type { NaturallyOrdered } from "../fundamentals/Comparable.js";
-import { JavaAbstractSet, unsupported } from "./JavaCollection.js";
-import { type JavaIterator, mapIterator } from "./JavaIterator.js";
+import { AbstractSet, unsupported } from "./Collection.js";
+import { type Iterator, mapIterator } from "./Iterator.js";
 import { TreeMap } from "./TreeMap.js";
 
 /**
@@ -20,15 +20,15 @@ import { TreeMap } from "./TreeMap.js";
  * sorted array buys, and — most importantly — that membership is decided by *comparing*, not by `equals`. Two
  * members that compare equal are one member here, whatever `equals` says.
  *
- * That last point is the one to watch when a `TreeSet` meets a {@link JavaSet}. `equals` on both is inherited
- * from {@link JavaAbstractSet} and is written in terms of `containsAll`, so each set answers using its own
+ * That last point is the one to watch when a `TreeSet` meets a {@link Set}. `equals` on both is inherited
+ * from {@link AbstractSet} and is written in terms of `containsAll`, so each set answers using its own
  * notion of sameness. With a comparator consistent with `equals` — the contract {@link Comparable} asks for —
  * the two agree; without one, they can disagree in either direction.
  *
  * The bulk operations, `toArray`, `removeIf`, `forEach`, `toString`, `equals` and `hashCode` all come from
- * {@link JavaAbstractSet}; only the six primitives and the navigation below are implemented here.
+ * {@link AbstractSet}; only the six primitives and the navigation below are implemented here.
  */
-export class TreeSet<T> extends JavaAbstractSet<T> {
+export class TreeSet<T> extends AbstractSet<T> {
   /** the value is a placeholder; only the key carries meaning, as in Java's `TreeSet.PRESENT` */
   #map: TreeMap<T, boolean>;
   #readOnly = false;
@@ -70,7 +70,7 @@ export class TreeSet<T> extends JavaAbstractSet<T> {
    * Java's `Collections.unmodifiableSortedSet`: a read-only *view*, not a copy.
    *
    * The view shares the original's storage, so later changes to the original show through — see
-   * {@link JavaMap.unmodifiable} for why that is worth knowing before you hand one out.
+   * {@link Map.unmodifiable} for why that is worth knowing before you hand one out.
    */
   public static unmodifiable<T>(set: TreeSet<T>): TreeSet<T> {
     const view = new TreeSet<T>();
@@ -122,7 +122,7 @@ export class TreeSet<T> extends JavaAbstractSet<T> {
   }
 
   /**
-   * Overrides {@link JavaCollection.retainAll}, which decides what to keep with `equals`. This set decides
+   * Overrides {@link Collection.retainAll}, which decides what to keep with `equals`. This set decides
    * membership by comparing, so an inherited `retainAll` could drop a member that {@link contains} says is
    * present. Sorting the argument once also takes it from O(n*m) to O((n+m) log m).
    */
@@ -285,10 +285,10 @@ export class TreeSet<T> extends JavaAbstractSet<T> {
 
   /**
    * The backing map's cursor, read as keys, so the walk is in order and removal takes the member it is standing
-   * on. The read-only check belongs here for the same reason it does in {@link JavaSet.iterator}: {@link of}
+   * on. The read-only check belongs here for the same reason it does in {@link Set.iterator}: {@link of}
    * marks the set unmodifiable, not the map.
    */
-  public iterator(): JavaIterator<T> {
+  public iterator(): Iterator<T> {
     return mapIterator(
       this.#map.entryIterator(),
       (entry) => entry.getKey(),

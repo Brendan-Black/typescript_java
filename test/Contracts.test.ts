@@ -1,13 +1,13 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { JavaMap } from "../src/collections/JavaMap.js";
+import { Map } from "../src/collections/Map.js";
 import {
   hashContractChecksEnabled,
   overridesEqualsWithoutHashCode,
   setHashContractChecks,
 } from "../src/fundamentals/Contracts.js";
 import { hashAll } from "../src/fundamentals/Hashing.js";
-import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
+import { boilerplateEqualityCheck, _Object } from "../src/fundamentals/Object.js";
 
 /** captures whatever the block writes to console.warn, and always puts the real one back */
 function captureWarnings(block: () => void): string[] {
@@ -28,8 +28,8 @@ function captureWarnings(block: () => void): string[] {
  * Every test needs its own class: the warnings fire once per class and are remembered process-wide, so a
  * shared fixture would make the tests depend on their running order.
  */
-function makeBrokenKeyClass(): new (id: number) => JavaObject {
-  return class BrokenKey extends JavaObject {
+function makeBrokenKeyClass(): new (id: number) => _Object {
+  return class BrokenKey extends _Object {
     constructor(public readonly id: number) {
       super();
     }
@@ -47,7 +47,7 @@ describe("overridesEqualsWithoutHashCode", () => {
   });
 
   it("accepts a class that overrides both", () => {
-    class Good extends JavaObject {
+    class Good extends _Object {
       constructor(public readonly id: number) {
         super();
       }
@@ -62,12 +62,12 @@ describe("overridesEqualsWithoutHashCode", () => {
   });
 
   it("accepts a class that overrides neither", () => {
-    class Plain extends JavaObject {}
+    class Plain extends _Object {}
     assert.equal(overridesEqualsWithoutHashCode(new Plain()), false);
   });
 
   it("credits an override inherited from a parent class", () => {
-    class Base extends JavaObject {
+    class Base extends _Object {
       public override equals(other: any): boolean {
         return this === other;
       }
@@ -80,7 +80,7 @@ describe("overridesEqualsWithoutHashCode", () => {
   });
 
   it("still flags a subclass that overrides only equals on top of a compliant parent", () => {
-    class Base extends JavaObject {}
+    class Base extends _Object {}
     class Child extends Base {
       public override equals(other: any): boolean {
         return this === other;
@@ -89,7 +89,7 @@ describe("overridesEqualsWithoutHashCode", () => {
     assert.equal(overridesEqualsWithoutHashCode(new Child()), true);
   });
 
-  it("ignores values that are not JavaObjects", () => {
+  it("ignores values that are not `Java.Object`s", () => {
     for (const value of [null, undefined, 1, "a", {}, [], () => {}]) {
       assert.equal(overridesEqualsWithoutHashCode(value), false, `flagged ${String(value)}`);
     }
@@ -100,7 +100,7 @@ describe("hash contract warnings", () => {
   it("warns when a broken key is put into a map", () => {
     const BrokenKey = makeBrokenKeyClass();
     const warnings = captureWarnings(() => {
-      new JavaMap<JavaObject, string>().put(new BrokenKey(1), "a");
+      new Map<_Object, string>().put(new BrokenKey(1), "a");
     });
     const [warning] = warnings;
     assert.equal(warnings.length, 1);
@@ -112,7 +112,7 @@ describe("hash contract warnings", () => {
   it("warns once per class, not once per insertion", () => {
     const BrokenKey = makeBrokenKeyClass();
     const warnings = captureWarnings(() => {
-      const map = new JavaMap<JavaObject, string>();
+      const map = new Map<_Object, string>();
       for (let i = 0; i < 10; i++) {
         map.put(new BrokenKey(i), "x");
       }
@@ -121,7 +121,7 @@ describe("hash contract warnings", () => {
   });
 
   it("says nothing for a well-behaved key", () => {
-    class Good extends JavaObject {
+    class Good extends _Object {
       constructor(public readonly id: number) {
         super();
       }
@@ -133,7 +133,7 @@ describe("hash contract warnings", () => {
       }
     }
     const warnings = captureWarnings(() => {
-      const map = new JavaMap<Good, string>();
+      const map = new Map<Good, string>();
       for (let i = 0; i < 20; i++) {
         map.put(new Good(i), "x");
       }
@@ -143,7 +143,7 @@ describe("hash contract warnings", () => {
 
   it("says nothing for primitive keys", () => {
     const warnings = captureWarnings(() => {
-      const map = new JavaMap<string, number>();
+      const map = new Map<string, number>();
       for (let i = 0; i < 20; i++) {
         map.put(`key-${i}`, i);
       }
@@ -154,7 +154,7 @@ describe("hash contract warnings", () => {
   it("demonstrates the bug it is warning about", () => {
     const BrokenKey = makeBrokenKeyClass();
     captureWarnings(() => {
-      const map = new JavaMap<JavaObject, string>();
+      const map = new Map<_Object, string>();
       map.put(new BrokenKey(1), "a");
       // equal by equals(), but bucketed by an identity hash, so the lookup goes to the wrong bucket
       assert.equal(new BrokenKey(1).equals(new BrokenKey(1)), true);
@@ -163,7 +163,7 @@ describe("hash contract warnings", () => {
   });
 
   it("warns about a long collision chain", () => {
-    class Clustered extends JavaObject {
+    class Clustered extends _Object {
       constructor(public readonly id: number) {
         super();
       }
@@ -175,7 +175,7 @@ describe("hash contract warnings", () => {
       }
     }
     const warnings = captureWarnings(() => {
-      const map = new JavaMap<Clustered, number>();
+      const map = new Map<Clustered, number>();
       for (let i = 0; i < 12; i++) {
         map.put(new Clustered(i), i);
       }
@@ -188,7 +188,7 @@ describe("hash contract warnings", () => {
   });
 
   it("tolerates a short collision chain in silence", () => {
-    class SlightlyClustered extends JavaObject {
+    class SlightlyClustered extends _Object {
       constructor(public readonly id: number) {
         super();
       }
@@ -200,7 +200,7 @@ describe("hash contract warnings", () => {
       }
     }
     const warnings = captureWarnings(() => {
-      const map = new JavaMap<SlightlyClustered, number>();
+      const map = new Map<SlightlyClustered, number>();
       for (let i = 0; i < 5; i++) {
         map.put(new SlightlyClustered(i), i);
       }
@@ -217,7 +217,7 @@ describe("setHashContractChecks", () => {
       setHashContractChecks(false);
       try {
         assert.equal(hashContractChecksEnabled(), false);
-        new JavaMap<JavaObject, string>().put(new BrokenKey(1), "a");
+        new Map<_Object, string>().put(new BrokenKey(1), "a");
       } finally {
         setHashContractChecks(true);
       }

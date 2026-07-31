@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { JavaList } from "../src/collections/JavaList.js";
+import { List } from "../src/collections/List.js";
 import { ClassCastException } from "../src/exceptions/ClassCastException.js";
 import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
 import { NullPointerException } from "../src/exceptions/NullPointerException.js";
@@ -14,9 +14,9 @@ import {
   reverseOrder,
   type Comparator,
 } from "../src/fundamentals/Comparator.js";
-import { JavaObject } from "../src/fundamentals/Object.js";
+import { _Object } from "../src/fundamentals/Object.js";
 
-class Money extends JavaObject implements Comparable<Money> {
+class Money extends _Object implements Comparable<Money> {
   constructor(public readonly cents: number) {
     super();
   }
@@ -226,18 +226,18 @@ describe("null-tolerant comparators", () => {
   const values: readonly (string | null | undefined)[] = ["b", null, "a", undefined];
 
   it("nullsFirst puts absent values before everything else", () => {
-    const sorted = new JavaList<string | null | undefined>(values);
+    const sorted = new List<string | null | undefined>(values);
     sorted.sort(nullsFirst(naturalOrder<string>()));
     assert.deepEqual([...sorted], [null, undefined, "a", "b"]);
   });
 
   it("nullsLast puts absent values after everything else", () => {
-    const sorted = new JavaList<string | null | undefined>(values);
+    const sorted = new List<string | null | undefined>(values);
     sorted.sort(nullsLast(naturalOrder<string>()));
     assert.deepEqual([...sorted], ["a", "b", null, undefined]);
   });
 
-  it("Array.prototype.sort overrules nullsFirst for undefined, which JavaList.sort does not", () => {
+  it("Array.prototype.sort overrules nullsFirst for undefined, which List.sort does not", () => {
     // `Array.prototype.sort` hoists undefined entries to the end and never shows them to the comparator, so a
     // null-tolerant comparator only half works on a raw array. `null` is an ordinary element and does go through.
     assert.deepEqual([...values].sort(nullsFirst(naturalOrder<string>())), [null, "a", "b", undefined]);
@@ -272,15 +272,15 @@ describe("null-tolerant comparators", () => {
   });
 });
 
-describe("comparators and JavaList", () => {
-  it("sorts a JavaList in place", () => {
-    const list = new JavaList<string>(["c", "a", "b"]);
+describe("comparators and List", () => {
+  it("sorts a List in place", () => {
+    const list = new List<string>(["c", "a", "b"]);
     list.sort(naturalOrder<string>());
     assert.equal(list.toString(), "[a, b, c]");
   });
 
-  it("sorts a JavaList of value types by a composed comparator", () => {
-    const list = new JavaList<Money>([new Money(300), new Money(100)]);
+  it("sorts a List of value types by a composed comparator", () => {
+    const list = new List<Money>([new Money(300), new Money(100)]);
     list.sort(comparing<Money, number>((m) => m.cents).reversed());
     assert.deepEqual([...list].map((m) => m.cents), [300, 100]);
   });
@@ -291,7 +291,7 @@ describe("comparators and JavaList", () => {
   });
 
   it("is stable: equal elements keep their original order", () => {
-    const list = new JavaList([
+    const list = new List([
       { key: "b", seq: 1 },
       { key: "a", seq: 2 },
       { key: "b", seq: 3 },
@@ -302,14 +302,14 @@ describe("comparators and JavaList", () => {
   });
 
   it("shows the new order through an unmodifiable view of the same list", () => {
-    const backing = new JavaList<string>(["c", "a", "b"]);
-    const view = JavaList.unmodifiable(backing);
+    const backing = new List<string>(["c", "a", "b"]);
+    const view = List.unmodifiable(backing);
     backing.sort(naturalOrder<string>());
     assert.equal(view.toString(), "[a, b, c]");
   });
 
   it("counts as a structural change, so an in-flight iterator fails fast", () => {
-    const list = new JavaList<string>(["c", "a", "b"]);
+    const list = new List<string>(["c", "a", "b"]);
     assert.throws(() => {
       for (const _ of list) {
         list.sort(naturalOrder<string>());

@@ -1,12 +1,12 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { boilerplateEqualityCheck, JavaObject } from "../src/fundamentals/Object.js";
+import { boilerplateEqualityCheck, _Object } from "../src/fundamentals/Object.js";
 
-class Alpha extends JavaObject {}
-class Beta extends JavaObject {}
+class Alpha extends _Object {}
+class Beta extends _Object {}
 
 /** a value type, comparing by field the way a real subclass would */
-class Point extends JavaObject {
+class Point extends _Object {
   constructor(public readonly x: number, public readonly y: number) {
     super();
   }
@@ -15,7 +15,7 @@ class Point extends JavaObject {
   }
 }
 
-describe("JavaObject.equals (no override — Java's reference equality)", () => {
+describe("_Object.equals (no override — Java's reference equality)", () => {
   it("returns exactly `true` for the same reference, not the object itself", () => {
     const a = new Alpha();
     const result = a.equals(a);
@@ -28,11 +28,11 @@ describe("JavaObject.equals (no override — Java's reference equality)", () => 
     assert.equal(new Alpha().equals(new Alpha()), false);
   });
 
-  it("returns false across different JavaObject subclasses", () => {
+  it("returns false across different _Object subclasses", () => {
     assert.equal(new Alpha().equals(new Beta()), false);
   });
 
-  it("returns false, and does not throw, for non-JavaObject arguments", () => {
+  it("returns false, and does not throw, for non-`Java.Object` arguments", () => {
     const a = new Alpha();
     for (const other of [null, undefined, 0, 1, "", "Alpha", true, {}, [], Symbol("s"), () => {}]) {
       assert.equal(a.equals(other), false, `expected false for ${String(other)}`);
@@ -72,13 +72,13 @@ describe("boilerplateEqualityCheck with a callback", () => {
 
   it("does not treat a same-named class from elsewhere as the same type", () => {
     // stands in for minification, where unrelated classes can collapse to the same `constructor.name`
-    const Impostor = class Point extends JavaObject {};
+    const Impostor = class Point extends _Object {};
     assert.equal(new Impostor().constructor.name, "Point");
     assert.equal(new Point(1, 2).equals(new Impostor()), false);
   });
 });
 
-describe("JavaObject.hashCode", () => {
+describe("_Object.hashCode", () => {
   it("is stable across calls on one instance", () => {
     const a = new Alpha();
     assert.equal(a.hashCode(), a.hashCode());
@@ -91,37 +91,37 @@ describe("JavaObject.hashCode", () => {
   });
 });
 
-describe("JavaObject.isInstance", () => {
-  it("accepts a properly constructed JavaObject", () => {
-    assert.equal(JavaObject.isInstance(new Alpha()), true);
-    assert.equal(JavaObject.isInstance(new Point(1, 2)), true);
+describe("_Object.isInstance", () => {
+  it("accepts a properly constructed _Object", () => {
+    assert.equal(_Object.isInstance(new Alpha()), true);
+    assert.equal(_Object.isInstance(new Point(1, 2)), true);
   });
 
   it("rejects a prototype-only forgery that instanceof would accept", () => {
     const forged = Object.create(Point.prototype);
-    assert.ok(forged instanceof JavaObject, "instanceof is fooled by this");
-    assert.equal(JavaObject.isInstance(forged), false, "the private-field check is not");
+    assert.ok(forged instanceof _Object, "instanceof is fooled by this");
+    assert.equal(_Object.isInstance(forged), false, "the private-field check is not");
   });
 
-  it("rejects everything that is not a JavaObject at all", () => {
+  it("rejects everything that is not a `Java.Object` at all", () => {
     for (const other of [null, undefined, 0, "", {}, [], Symbol("s"), () => {}]) {
-      assert.equal(JavaObject.isInstance(other), false, `accepted ${String(other)}`);
+      assert.equal(_Object.isInstance(other), false, `accepted ${String(other)}`);
     }
   });
 });
 
-describe("JavaObject inheritance", () => {
+describe("_Object inheritance", () => {
   it("no longer extends Object, which did nothing", () => {
     // every JavaScript object already inherits from Object.prototype; naming it only made the declaration look
     // like it meant something
-    assert.equal(Object.getPrototypeOf(JavaObject), Function.prototype);
+    assert.equal(Object.getPrototypeOf(_Object), Function.prototype);
     // the inherited behaviour is unchanged either way
     assert.equal(Object.prototype.hasOwnProperty.call(new Alpha(), "x"), false);
     assert.ok(new Alpha() instanceof Object);
   });
 });
 
-describe("JavaObject.toString", () => {
+describe("_Object.toString", () => {
   it("is stable across calls", () => {
     const a = new Alpha();
     // regression: this used `Math.random()`, giving a different string every call

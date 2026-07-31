@@ -1,4 +1,4 @@
-import { JavaList } from "../collections/JavaList.js";
+import { List } from "../collections/List.js";
 import { XmlBindException } from "../exceptions/XmlBindException.js";
 import { Optional } from "../fundamentals/Optional.js";
 import { parseXml, XmlElement } from "./XmlParser.js";
@@ -21,7 +21,7 @@ import { parseXml, XmlElement } from "./XmlParser.js";
  *
  * ```ts
  * interface Item { sku: string; quantity: number; }
- * interface Order { id: string; total: number; note: Optional<string>; items: JavaList<Item>; }
+ * interface Order { id: string; total: number; note: Optional<string>; items: List<Item>; }
  *
  * const item: XmlReader<Item> = elementOf<Item>({
  *   sku: attribute("sku"),
@@ -410,16 +410,16 @@ export function childText<T>(name: string, text?: XmlTextReader<T>): XmlField<T 
 }
 
 /**
- * Every child element with this name, as a {@link JavaList}, in document order.
+ * Every child element with this name, as a {@link List}, in document order.
  *
  * A repeated element is how XML writes a collection, and none of them is how it writes an empty one — so this
  * never fails for absence. Each element gets its own XPath index, 1-based: `/order/item[2]`.
  */
-export function children<T>(name: string, reader: XmlReader<T>): XmlField<JavaList<T>> {
+export function children<T>(name: string, reader: XmlReader<T>): XmlField<List<T>> {
   return {
-    read(parent: XmlElement, path: string): JavaList<T> {
+    read(parent: XmlElement, path: string): List<T> {
       const found = parent.getChildrenNamed(name);
-      const values = new JavaList<T>();
+      const values = new List<T>();
       let index = 1;
       for (const element of found) {
         values.add(reader.read(element, `${path}/${name}[${index}]`));
@@ -443,16 +443,16 @@ export function children<T>(name: string, reader: XmlReader<T>): XmlField<JavaLi
  * need to tell "no items" from "never said" can reach for `optionalChild` over the wrapper instead. Two
  * wrappers is still a failure: that is a document contradicting itself, not a shorthand.
  */
-export function wrappedChildren<T>(wrapper: string, name: string, reader: XmlReader<T>): XmlField<JavaList<T>> {
+export function wrappedChildren<T>(wrapper: string, name: string, reader: XmlReader<T>): XmlField<List<T>> {
   const inner = children(name, reader);
   return {
-    read(parent: XmlElement, path: string): JavaList<T> {
+    read(parent: XmlElement, path: string): List<T> {
       const at = `${path}/${wrapper}`;
       const found = parent.getChildrenNamed(wrapper);
       if (found.size() > 1) {
         throw new XmlBindException(at, `expected at most one <${wrapper}>, got ${found.size()}`);
       }
-      return found.size() === 0 ? new JavaList<T>() : inner.read(found.get(0), at);
+      return found.size() === 0 ? new List<T>() : inner.read(found.get(0), at);
     },
   };
 }

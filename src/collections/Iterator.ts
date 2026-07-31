@@ -20,7 +20,7 @@ import { elementAt } from "../fundamentals/Indexing.js";
  * }
  * ```
  *
- * That is exact in a way {@link JavaCollection.removeIf} is not: `remove` drops *this* element, where `removeIf`
+ * That is exact in a way {@link Collection.removeIf} is not: `remove` drops *this* element, where `removeIf`
  * removes by value and so cannot tell two `equals` elements apart. Reach for `removeIf` when the predicate is a
  * function of the value — it is shorter and says what it means — and for this when position matters.
  *
@@ -28,7 +28,7 @@ import { elementAt } from "../fundamentals/Indexing.js";
  * accepts an `Iterable`, and having to wrap a half-consumed iterator to hand it on would be a needless step.
  * `for (const value of it)` picks up wherever the cursor already is.
  */
-export interface JavaIterator<T> extends Iterable<T> {
+export interface Iterator<T> extends Iterable<T> {
   /** Whether {@link next} has anything left to return. */
   hasNext(): boolean;
 
@@ -68,7 +68,7 @@ export interface JavaIterator<T> extends Iterable<T> {
  * }
  * ```
  */
-export interface JavaListIterator<T> extends JavaIterator<T> {
+export interface ListIterator<T> extends Iterator<T> {
   /** Whether {@link previous} has anything left to return. */
   hasPrevious(): boolean;
 
@@ -140,7 +140,7 @@ export interface IterationSource<T> {
  * iterator reading through it would trip over the very removal it just performed. Watching `modCount` keeps the
  * fail-fast guarantee for everyone *else* — a change made behind this iterator's back still throws.
  */
-class SnapshotIterator<T> implements JavaIterator<T> {
+class SnapshotIterator<T> implements Iterator<T> {
   readonly #source: IterationSource<T>;
   #expectedModCount: number;
   /** how far through {@link IterationSource.elements} we are */
@@ -164,7 +164,7 @@ class SnapshotIterator<T> implements JavaIterator<T> {
     if (!this.hasNext()) {
       throw new NoSuchElementException("The iterator has no more elements.");
     }
-    const value = elementAt(this.#source.elements, this.#cursor, "JavaIterator.next");
+    const value = elementAt(this.#source.elements, this.#cursor, "Iterator.next");
     this.#cursor++;
     this.#removable = true;
     return value;
@@ -177,7 +177,7 @@ class SnapshotIterator<T> implements JavaIterator<T> {
     }
     this.#checkForComodification();
     const at = this.#cursor - 1;
-    this.#source.removeAt(elementAt(this.#source.elements, at, "JavaIterator.remove"), at - this.#removed);
+    this.#source.removeAt(elementAt(this.#source.elements, at, "Iterator.remove"), at - this.#removed);
     this.#removed++;
     this.#removable = false;
     // our own removal is not a comodification, so adopt the count it produced rather than tripping on it
@@ -201,12 +201,12 @@ class SnapshotIterator<T> implements JavaIterator<T> {
  * The same cursor seen through a transform: a map's entry iterator becomes its key or value iterator, and
  * removing through either still removes the whole entry, as Java's views do.
  */
-class MappedIterator<T, R> implements JavaIterator<R> {
-  readonly #source: JavaIterator<T>;
+class MappedIterator<T, R> implements Iterator<R> {
+  readonly #source: Iterator<T>;
   readonly #transform: (value: T) => R;
   readonly #beforeRemove: (() => void) | undefined;
 
-  constructor(source: JavaIterator<T>, transform: (value: T) => R, beforeRemove: (() => void) | undefined) {
+  constructor(source: Iterator<T>, transform: (value: T) => R, beforeRemove: (() => void) | undefined) {
     this.#source = source;
     this.#transform = transform;
     this.#beforeRemove = beforeRemove;
@@ -260,7 +260,7 @@ export interface ListIterationSource<T> {
  * a pair of indices into live storage, so it can put itself back where it belongs after each of its own writes;
  * it cannot for a collection whose position is not a number.
  */
-class LiveListIterator<T> implements JavaListIterator<T> {
+class LiveListIterator<T> implements ListIterator<T> {
   readonly #source: ListIterationSource<T>;
   /** sits between elements: the index {@link next} would return, and one past the one {@link previous} would */
   #cursor: number;
@@ -362,8 +362,8 @@ class LiveListIterator<T> implements JavaListIterator<T> {
   }
 }
 
-/** Builds the iterator a collection hands out from {@link JavaCollection.iterator}. */
-export function iteratorOver<T>(source: IterationSource<T>): JavaIterator<T> {
+/** Builds the iterator a collection hands out from {@link Collection.iterator}. */
+export function iteratorOver<T>(source: IterationSource<T>): Iterator<T> {
   return new SnapshotIterator<T>(source);
 }
 
@@ -372,7 +372,7 @@ export function iteratorOver<T>(source: IterationSource<T>): JavaIterator<T> {
  *
  * @param index where the cursor starts, between elements. The caller is expected to have bounds-checked it.
  */
-export function listIteratorOver<T>(source: ListIterationSource<T>, index: number): JavaListIterator<T> {
+export function listIteratorOver<T>(source: ListIterationSource<T>, index: number): ListIterator<T> {
   return new LiveListIterator<T>(source, index);
 }
 
@@ -383,9 +383,9 @@ export function listIteratorOver<T>(source: ListIterationSource<T>, index: numbe
  * right while the storage behind it is not — an unmodifiable set over a perfectly mutable map, say
  */
 export function mapIterator<T, R>(
-  source: JavaIterator<T>,
+  source: Iterator<T>,
   transform: (value: T) => R,
   beforeRemove?: () => void,
-): JavaIterator<R> {
+): Iterator<R> {
   return new MappedIterator<T, R>(source, transform, beforeRemove);
 }

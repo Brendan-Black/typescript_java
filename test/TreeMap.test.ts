@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { unmodifiableMap } from "../src/collections/Collections.js";
-import { JavaMapEntry } from "../src/collections/JavaAbstractMap.js";
-import { JavaMap } from "../src/collections/JavaMap.js";
+import { MapEntry } from "../src/collections/AbstractMap.js";
+import { Map } from "../src/collections/Map.js";
 import { TreeMap } from "../src/collections/TreeMap.js";
 import { ClassCastException } from "../src/exceptions/ClassCastException.js";
 import { ConcurrentModificationException } from "../src/exceptions/ConcurrentModificationException.js";
@@ -11,10 +11,10 @@ import { NoSuchElementException } from "../src/exceptions/NoSuchElementException
 import { NullPointerException } from "../src/exceptions/NullPointerException.js";
 import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
 import { comparing, naturalOrder, reverseOrder } from "../src/fundamentals/Comparator.js";
-import { JavaObject } from "../src/fundamentals/Object.js";
+import { _Object } from "../src/fundamentals/Object.js";
 
 /** a key whose order deliberately ignores part of its identity, so "compares equal" and "is equal" can diverge */
-class Version extends JavaObject {
+class Version extends _Object {
   constructor(public readonly major: number, public readonly label: string) {
     super();
   }
@@ -26,8 +26,8 @@ class Version extends JavaObject {
   }
 }
 
-/** a JavaObject with no order of its own — the case a natural-order TreeMap has to refuse */
-class JavaObject2 extends JavaObject {}
+/** a Java.Object with no order of its own — the case a natural-order TreeMap has to refuse */
+class Unordered extends _Object {}
 
 const letters = (): TreeMap<string, number> =>
   new TreeMap<string, number>([["carol", 3], ["alice", 1], ["bob", 2]]);
@@ -99,7 +99,7 @@ describe("TreeMap as a map", () => {
     assert.equal(map.get(new Version(1, "-anything")), "second");
   });
 
-  it("inherits the derived operations from JavaAbstractMap", () => {
+  it("inherits the derived operations from AbstractMap", () => {
     const map = letters();
     assert.equal(map.getOrDefault("dave", 0), 0);
     assert.equal(map.putIfAbsent("alice", 99), 1);
@@ -114,7 +114,7 @@ describe("TreeMap as a map", () => {
 
   it("equals another map with the same entries, whichever kind it is", () => {
     const tree = letters();
-    const hash = new JavaMap<string, number>([["bob", 2], ["carol", 3], ["alice", 1]]);
+    const hash = new Map<string, number>([["bob", 2], ["carol", 3], ["alice", 1]]);
     assert.equal(tree.equals(hash), true);
     assert.equal(hash.equals(tree), true);
     assert.equal(tree.hashCode(), hash.hashCode());
@@ -141,8 +141,8 @@ describe("TreeMap as a map", () => {
 
 describe("TreeMap key requirements", () => {
   it("rejects a key with no natural order, on the very first insertion", () => {
-    const map = new TreeMap<JavaObject, number>();
-    assert.throws(() => map.put(new JavaObject2(), 1), ClassCastException);
+    const map = new TreeMap<_Object, number>();
+    assert.throws(() => map.put(new Unordered(), 1), ClassCastException);
   });
 
   it("rejects a null key under natural order", () => {
@@ -151,8 +151,8 @@ describe("TreeMap key requirements", () => {
   });
 
   it("accepts whatever the comparator accepts", () => {
-    const map = new TreeMap<JavaObject, number>(() => 0);
-    assert.doesNotThrow(() => map.put(new JavaObject2(), 1));
+    const map = new TreeMap<_Object, number>(() => 0);
+    assert.doesNotThrow(() => map.put(new Unordered(), 1));
   });
 });
 
@@ -178,8 +178,8 @@ describe("TreeMap navigation", () => {
   });
 
   it("hands back whole entries", () => {
-    assert.equal(numbers().firstEntry()?.equals(new JavaMapEntry(10, "a")), true);
-    assert.equal(numbers().lastEntry()?.equals(new JavaMapEntry(40, "d")), true);
+    assert.equal(numbers().firstEntry()?.equals(new MapEntry(10, "a")), true);
+    assert.equal(numbers().lastEntry()?.equals(new MapEntry(40, "d")), true);
   });
 
   it("floor and ceiling accept an exact match; lower and higher do not", () => {

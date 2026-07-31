@@ -8,7 +8,7 @@ import { NoSuchElementException } from "../src/exceptions/NoSuchElementException
 import { NotImplementedException } from "../src/exceptions/NotImplementedException.js";
 import { NullPointerException } from "../src/exceptions/NullPointerException.js";
 import { RuntimeException } from "../src/exceptions/RuntimeException.js";
-import { TSJavaException } from "../src/exceptions/TSJavaException.js";
+import { Throwable } from "../src/exceptions/Throwable.js";
 import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOperationException.js";
 
 const CONCRETE = [
@@ -24,17 +24,17 @@ const CONCRETE = [
 ] as const;
 
 describe("exception hierarchy", () => {
-  it("puts everything under RuntimeException, TSJavaException and Error", () => {
+  it("puts everything under RuntimeException, Throwable and Error", () => {
     for (const Exception of CONCRETE) {
       const error = new Exception("boom");
       assert.ok(error instanceof RuntimeException, `${Exception.name} is not a RuntimeException`);
-      assert.ok(error instanceof TSJavaException, `${Exception.name} is not a TSJavaException`);
+      assert.ok(error instanceof Throwable, `${Exception.name} is not a Throwable`);
       assert.ok(error instanceof Error, `${Exception.name} is not an Error`);
     }
   });
 
   it("reparents IllegalArgument and IllegalState under RuntimeException, as Java does", () => {
-    // regression: both extended TSJavaException directly, skipping the layer Java puts them under
+    // regression: both extended Throwable directly, skipping the layer Java puts them under
     assert.ok(new IllegalArgumentException() instanceof RuntimeException);
     assert.ok(new IllegalStateException() instanceof RuntimeException);
   });
@@ -70,7 +70,7 @@ describe("exception hierarchy", () => {
   });
 
   it("distinguishes library failures from unrelated ones", () => {
-    assert.equal(new TypeError("unrelated") instanceof TSJavaException, false);
+    assert.equal(new TypeError("unrelated") instanceof Throwable, false);
   });
 
   it("keeps a usable stack and string form", () => {

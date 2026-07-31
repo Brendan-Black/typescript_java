@@ -8,11 +8,11 @@
  * The hierarchy below it mirrors Java's: this stands in for `java.lang.Throwable`, and everything a caller is
  * realistically going to catch descends from {@link RuntimeException} rather than from here directly.
  */
-export abstract class TSJavaException extends Error {
+export abstract class Throwable extends Error {
   constructor(message?: string, options?: ErrorOptions) {
     super(message, options);
-    // One spelling of the idea: the class, this string and the package name all say TSJava. Subclasses
-    // overwrite it with their own name, so a caller reading `error.name` always gets the class they caught.
-    this.name = "TSJavaException";
+    // Subclasses overwrite this with their own name, so a caller reading `error.name` always gets the class
+    // they caught rather than the root of the hierarchy.
+    this.name = "Throwable";
   }
 }

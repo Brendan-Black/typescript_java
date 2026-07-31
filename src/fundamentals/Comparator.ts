@@ -3,7 +3,7 @@ import { compareOf, type NaturallyOrdered } from "./Comparable.js";
 /**
  * Java's `Comparator<T>`: an order imposed on a type from outside, rather than one the type carries itself.
  *
- * A `Comparator` here *is* a comparison function — it can be passed straight to {@link JavaList.sort} or to
+ * A `Comparator` here *is* a comparison function — it can be passed straight to {@link List.sort} or to
  * `Array.prototype.sort` — that additionally carries Java's default methods on it:
  *
  * ```ts

@@ -67,12 +67,16 @@ const order: Java.Comparator<string> = Java.Comparator.naturalOrder<string>();
 Java.Collections.sort(names);
 ```
 
-The namespace renames its bindings at the boundary rather than wrapping them, so there is no indirection to pay
-for and `instanceof` is exactly what you would expect. The classes themselves are still *declared* under prefixed
-names, which is deliberate rather than merely historical: `collections/JavaMap.ts` stores its buckets in a real
-`Map` and `fundamentals/Object.ts` calls the real `Object.getPrototypeOf`, so a class declared as `Map` or
-`Object` would shadow, inside its own module, the global it is built on. Renaming only on the way out sidesteps
-that, and leaves `constructor.name` alone as well — a `Java.Map` renders as `JavaMap@1f45` in `toString()`.
+The namespace re-exports its bindings rather than wrapping them, so there is no indirection to pay for and
+`instanceof` is exactly what you would expect. The classes are *declared* under these same names — the file is
+`collections/Map.ts` and the declaration is `class Map` — so `constructor.name` carries Java's name too, and a
+stack trace reads `Map`, not something internal. Where a class shadows the global it is built on, that module
+reaches the global through `globalThis`: `Map` keeps its buckets in a `globalThis.Map`.
+
+One name resists. TypeScript refuses a class declaration named `Object` outright — `error TS2725` — whatever the
+module does about the global, so that one is declared `_Object` and renamed at the boundary. It is the only
+place where the exported name and the declared one differ, and `Java.Object.name` is `"_Object"` in consequence.
+Subclasses are unaffected: they print their own name, which is what `toString()` is for.
 
 Java's static-utility classes are sub-namespaces, which restores the reading they have in Java: `Java.Collections`
 carries `sort`, `max`, `min`, `binarySearch`, `reverse`, `swap` and the factories; `Java.Objects` carries

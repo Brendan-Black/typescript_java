@@ -17,9 +17,9 @@ import {
   unmodifiableMap,
   unmodifiableSet,
 } from "../src/collections/Collections.js";
-import { JavaList } from "../src/collections/JavaList.js";
-import { JavaMap } from "../src/collections/JavaMap.js";
-import { JavaSet } from "../src/collections/JavaSet.js";
+import { List } from "../src/collections/List.js";
+import { Map } from "../src/collections/Map.js";
+import { Set } from "../src/collections/Set.js";
 import { ClassCastException } from "../src/exceptions/ClassCastException.js";
 import { IndexOutOfBoundsException } from "../src/exceptions/IndexOutOfBoundsException.js";
 import { NoSuchElementException } from "../src/exceptions/NoSuchElementException.js";
@@ -27,8 +27,8 @@ import { UnsupportedOperationException } from "../src/exceptions/UnsupportedOper
 import { comparing, naturalOrder, nullsLast, reverseOrder } from "../src/fundamentals/Comparator.js";
 
 describe("immutable factories", () => {
-  it("JavaMap.of holds its entries and refuses mutation", () => {
-    const map = JavaMap.of<string, number>(["a", 1], ["b", 2]);
+  it("Map.of holds its entries and refuses mutation", () => {
+    const map = Map.of<string, number>(["a", 1], ["b", 2]);
     assert.equal(map.get("a"), 1);
     assert.equal(map.size(), 2);
     assert.throws(() => map.put("c", 3), UnsupportedOperationException);
@@ -40,8 +40,8 @@ describe("immutable factories", () => {
     assert.throws(() => map.replaceAll((v) => v), UnsupportedOperationException);
   });
 
-  it("JavaSet.of holds its members and refuses mutation", () => {
-    const set = JavaSet.of(1, 2, 3);
+  it("Set.of holds its members and refuses mutation", () => {
+    const set = Set.of(1, 2, 3);
     assert.equal(set.contains(2), true);
     assert.throws(() => set.add(4), UnsupportedOperationException);
     assert.throws(() => set.remove(1), UnsupportedOperationException);
@@ -50,9 +50,9 @@ describe("immutable factories", () => {
     assert.throws(() => set.retainAll([1]), UnsupportedOperationException);
   });
 
-  it("JavaSet.of collapses duplicate arguments rather than rejecting them", () => {
+  it("Set.of collapses duplicate arguments rather than rejecting them", () => {
     // Java's Set.of throws on a duplicate; following the constructor here is the less surprising of the two
-    assert.equal(JavaSet.of(1, 1, 2).size(), 2);
+    assert.equal(Set.of(1, 1, 2).size(), 2);
   });
 
   it("empty factories produce empty, immutable collections", () => {
@@ -83,7 +83,7 @@ describe("immutable factories", () => {
 
 describe("unmodifiable views", () => {
   it("read through to the original", () => {
-    const base = new JavaMap<string, number>([["a", 1]]);
+    const base = new Map<string, number>([["a", 1]]);
     const view = unmodifiableMap(base);
     assert.equal(view.get("a"), 1);
     assert.equal(view.size(), 1);
@@ -93,7 +93,7 @@ describe("unmodifiable views", () => {
   it("stay live as the original changes", () => {
     // Java's behaviour, and the usual surprise with it: the wrapper protects you from your caller, not your
     // caller from you
-    const base = new JavaMap<string, number>([["a", 1]]);
+    const base = new Map<string, number>([["a", 1]]);
     const view = unmodifiableMap(base);
     base.put("b", 2);
     assert.equal(view.size(), 2);
@@ -103,20 +103,20 @@ describe("unmodifiable views", () => {
   });
 
   it("refuse mutation on maps, sets and lists alike", () => {
-    assert.throws(() => unmodifiableMap(new JavaMap<string, number>()).put("a", 1), UnsupportedOperationException);
-    assert.throws(() => unmodifiableSet(new JavaSet<number>()).add(1), UnsupportedOperationException);
-    assert.throws(() => unmodifiableList(new JavaList<number>()).add(1), UnsupportedOperationException);
+    assert.throws(() => unmodifiableMap(new Map<string, number>()).put("a", 1), UnsupportedOperationException);
+    assert.throws(() => unmodifiableSet(new Set<number>()).add(1), UnsupportedOperationException);
+    assert.throws(() => unmodifiableList(new List<number>()).add(1), UnsupportedOperationException);
   });
 
   it("leave the original writable", () => {
-    const base = new JavaSet<number>([1]);
+    const base = new Set<number>([1]);
     unmodifiableSet(base);
     assert.equal(base.add(2), true);
     assert.equal(base.size(), 2);
   });
 
   it("propagate the refusal through a map's views", () => {
-    const view = unmodifiableMap(new JavaMap<string, number>([["a", 1]]));
+    const view = unmodifiableMap(new Map<string, number>([["a", 1]]));
     assert.throws(() => view.keySet().remove("a"), UnsupportedOperationException);
     assert.throws(() => view.values().remove(1), UnsupportedOperationException);
     assert.throws(() => view.keySet().clear(), UnsupportedOperationException);
@@ -125,13 +125,13 @@ describe("unmodifiable views", () => {
   });
 
   it("say why they refused", () => {
-    assert.throws(() => unmodifiableList(new JavaList<number>()).add(1), {
+    assert.throws(() => unmodifiableList(new List<number>()).add(1), {
       message: "add is not supported: this list is unmodifiable",
     });
   });
 
   it("are still equal to the collection they wrap", () => {
-    const set = new JavaSet<number>([1, 2]);
+    const set = new Set<number>([1, 2]);
     assert.equal(unmodifiableSet(set).equals(set), true);
     assert.equal(unmodifiableSet(set).hashCode(), set.hashCode());
   });
@@ -147,31 +147,31 @@ const byRank = comparing<Ranked, number>((value) => value.rank);
 
 describe("sort", () => {
   it("sorts by natural order when given no comparator", () => {
-    const numbers = new JavaList<number>([3, 1, 2]);
+    const numbers = new List<number>([3, 1, 2]);
     sort(numbers);
     assert.deepEqual(numbers.toArray(), [1, 2, 3]);
   });
 
   it("does not sort numbers as strings, unlike Array.prototype.sort", () => {
-    const numbers = new JavaList<number>([10, 9]);
+    const numbers = new List<number>([10, 9]);
     sort(numbers);
     assert.deepEqual(numbers.toArray(), [9, 10]);
   });
 
   it("sorts strings by code unit, as String.compareTo does", () => {
-    const names = new JavaList<string>(["banana", "Zebra", "apple"]);
+    const names = new List<string>(["banana", "Zebra", "apple"]);
     sort(names);
     assert.deepEqual(names.toArray(), ["Zebra", "apple", "banana"]);
   });
 
   it("sorts by the comparator when given one", () => {
-    const numbers = new JavaList<number>([3, 1, 2]);
+    const numbers = new List<number>([3, 1, 2]);
     sort(numbers, reverseOrder<number>());
     assert.deepEqual(numbers.toArray(), [3, 2, 1]);
   });
 
   it("is stable: equal elements keep their relative order", () => {
-    const items = new JavaList<Ranked>([
+    const items = new List<Ranked>([
       { rank: 1, label: "first" },
       { rank: 0, label: "zero" },
       { rank: 1, label: "second" },
@@ -181,25 +181,25 @@ describe("sort", () => {
   });
 
   it("honours the comparator on undefined elements", () => {
-    // Array.prototype.sort hoists undefined to the end without consulting the comparator; JavaList.sort sorts
+    // Array.prototype.sort hoists undefined to the end without consulting the comparator; List.sort sorts
     // positions so that nothing is hidden, and Collections.sort inherits that
-    const numbers = new JavaList<number | undefined>([2, undefined, 1]);
+    const numbers = new List<number | undefined>([2, undefined, 1]);
     sort(numbers, nullsLast(naturalOrder<number>()));
     assert.deepEqual(numbers.toArray(), [1, 2, undefined]);
   });
 
   it("refuses an unmodifiable list", () => {
-    assert.throws(() => sort(JavaList.of(2, 1)), UnsupportedOperationException);
+    assert.throws(() => sort(List.of(2, 1)), UnsupportedOperationException);
   });
 
   it("throws ClassCastException when natural order has nothing to work with", () => {
     // the compiler stops this at the call site; the cast is how a JavaScript caller would get here
-    const mixed = new JavaList<unknown>([1, "a"]);
-    assert.throws(() => sort(mixed as JavaList<number>), ClassCastException);
+    const mixed = new List<unknown>([1, "a"]);
+    assert.throws(() => sort(mixed as List<number>), ClassCastException);
   });
 
   it("leaves an empty list alone", () => {
-    const empty = new JavaList<number>();
+    const empty = new List<number>();
     sort(empty);
     assert.equal(empty.size(), 0);
   });
@@ -207,18 +207,18 @@ describe("sort", () => {
 
 describe("max and min", () => {
   it("find the extremes in natural order", () => {
-    assert.equal(max(new JavaList<number>([3, 1, 2])), 3);
-    assert.equal(min(new JavaList<number>([3, 1, 2])), 1);
+    assert.equal(max(new List<number>([3, 1, 2])), 3);
+    assert.equal(min(new List<number>([3, 1, 2])), 1);
   });
 
   it("use the comparator when given one", () => {
-    assert.equal(max(new JavaList<number>([3, 1, 2]), reverseOrder<number>()), 1);
-    assert.equal(min(new JavaList<number>([3, 1, 2]), reverseOrder<number>()), 3);
+    assert.equal(max(new List<number>([3, 1, 2]), reverseOrder<number>()), 1);
+    assert.equal(min(new List<number>([3, 1, 2]), reverseOrder<number>()), 3);
   });
 
-  it("accept any iterable, not just a JavaCollection", () => {
+  it("accept any iterable, not just a Collection", () => {
     assert.equal(max([3, 1, 2]), 3);
-    assert.equal(min(new JavaSet<string>(["b", "a", "c"])), "a");
+    assert.equal(min(new Set<string>(["b", "a", "c"])), "a");
     assert.equal(max(new Set<number>([1, 5, 3])), 5);
   });
 
@@ -252,7 +252,7 @@ describe("max and min", () => {
 });
 
 describe("binarySearch", () => {
-  const sorted = new JavaList<number>([10, 20, 30, 40]);
+  const sorted = new List<number>([10, 20, 30, 40]);
 
   it("finds every element that is present", () => {
     assert.equal(binarySearch(sorted, 10), 0);
@@ -278,7 +278,7 @@ describe("binarySearch", () => {
   });
 
   it("gives an insertion point that keeps the list sorted", () => {
-    const list = new JavaList<number>([10, 30]);
+    const list = new List<number>([10, 30]);
     const at = binarySearch(list, 20);
     assert.equal(at < 0, true);
     list.addAt(-(at + 1), 20);
@@ -286,13 +286,13 @@ describe("binarySearch", () => {
   });
 
   it("searches by the comparator when given one", () => {
-    const descending = new JavaList<number>([40, 30, 20, 10]);
+    const descending = new List<number>([40, 30, 20, 10]);
     assert.equal(binarySearch(descending, 30, reverseOrder<number>()), 1);
     assert.equal(binarySearch(descending, 35, reverseOrder<number>()), -2);
   });
 
   it("searches a list of objects by an extracted key", () => {
-    const items = new JavaList<Ranked>([
+    const items = new List<Ranked>([
       { rank: 1, label: "a" },
       { rank: 2, label: "b" },
       { rank: 3, label: "c" },
@@ -303,49 +303,49 @@ describe("binarySearch", () => {
 
 describe("reverse and swap", () => {
   it("reverses an even-length list", () => {
-    const list = new JavaList<number>([1, 2, 3, 4]);
+    const list = new List<number>([1, 2, 3, 4]);
     reverse(list);
     assert.deepEqual(list.toArray(), [4, 3, 2, 1]);
   });
 
   it("reverses an odd-length list, leaving the middle where it is", () => {
-    const list = new JavaList<number>([1, 2, 3]);
+    const list = new List<number>([1, 2, 3]);
     reverse(list);
     assert.deepEqual(list.toArray(), [3, 2, 1]);
   });
 
   it("leaves empty and single-element lists alone", () => {
-    const empty = new JavaList<number>();
+    const empty = new List<number>();
     reverse(empty);
     assert.equal(empty.size(), 0);
-    const one = new JavaList<number>([1]);
+    const one = new List<number>([1]);
     reverse(one);
     assert.deepEqual(one.toArray(), [1]);
   });
 
   it("swaps two positions", () => {
-    const list = new JavaList<string>(["a", "b", "c"]);
+    const list = new List<string>(["a", "b", "c"]);
     swap(list, 0, 2);
     assert.deepEqual(list.toArray(), ["c", "b", "a"]);
   });
 
   it("swapping a position with itself changes nothing", () => {
-    const list = new JavaList<string>(["a", "b"]);
+    const list = new List<string>(["a", "b"]);
     swap(list, 1, 1);
     assert.deepEqual(list.toArray(), ["a", "b"]);
   });
 
   it("rejects an out-of-range index", () => {
-    assert.throws(() => swap(new JavaList<number>([1, 2]), 0, 5), IndexOutOfBoundsException);
+    assert.throws(() => swap(new List<number>([1, 2]), 0, 5), IndexOutOfBoundsException);
   });
 
   it("refuses an unmodifiable list", () => {
-    assert.throws(() => reverse(JavaList.of(1, 2)), UnsupportedOperationException);
-    assert.throws(() => swap(JavaList.of(1, 2), 0, 1), UnsupportedOperationException);
+    assert.throws(() => reverse(List.of(1, 2)), UnsupportedOperationException);
+    assert.throws(() => swap(List.of(1, 2), 0, 1), UnsupportedOperationException);
   });
 
   it("does not disturb iteration, being a replacement rather than a structural change", () => {
-    const list = new JavaList<number>([1, 2, 3]);
+    const list = new List<number>([1, 2, 3]);
     reverse(list);
     assert.deepEqual([...list], [3, 2, 1]);
   });
@@ -353,43 +353,43 @@ describe("reverse and swap", () => {
 
 describe("removeIf", () => {
   it("drops every element the predicate accepts", () => {
-    const list = new JavaList<number>([1, 2, 3, 4]);
+    const list = new List<number>([1, 2, 3, 4]);
     assert.equal(list.removeIf((value) => value % 2 === 0), true);
     assert.deepEqual(list.toArray(), [1, 3]);
   });
 
   it("reports that nothing changed when nothing matched", () => {
-    const list = new JavaList<number>([1, 3]);
+    const list = new List<number>([1, 3]);
     assert.equal(list.removeIf((value) => value % 2 === 0), false);
     assert.deepEqual(list.toArray(), [1, 3]);
   });
 
   it("removes duplicates that all match", () => {
-    const list = new JavaList<number>([1, 2, 2, 3]);
+    const list = new List<number>([1, 2, 2, 3]);
     assert.equal(list.removeIf((value) => value === 2), true);
     assert.deepEqual(list.toArray(), [1, 3]);
   });
 
   it("works on a set", () => {
-    const set = new JavaSet<string>(["apple", "fig", "banana"]);
+    const set = new Set<string>(["apple", "fig", "banana"]);
     assert.equal(set.removeIf((value) => value.length > 3), true);
     assert.deepEqual(set.toArray(), ["fig"]);
   });
 
   it("works through a map's key view, taking the entries with it", () => {
-    const map = new JavaMap<string, number>([["a", 1], ["bb", 2], ["ccc", 3]]);
+    const map = new Map<string, number>([["a", 1], ["bb", 2], ["ccc", 3]]);
     assert.equal(map.keySet().removeIf((key) => key.length > 1), true);
     assert.deepEqual(map.keySet().toArray(), ["a"]);
     assert.equal(map.size(), 1);
   });
 
   it("does not need a snapshot at the call site, unlike removing inside for...of", () => {
-    const list = new JavaList<number>([1, 2, 3]);
+    const list = new List<number>([1, 2, 3]);
     list.removeIf((value) => value === 2);
     assert.deepEqual(list.toArray(), [1, 3]);
   });
 
   it("refuses an unmodifiable collection when something actually matches", () => {
-    assert.throws(() => JavaList.of(1, 2).removeIf((value) => value === 1), UnsupportedOperationException);
+    assert.throws(() => List.of(1, 2).removeIf((value) => value === 1), UnsupportedOperationException);
   });
 });

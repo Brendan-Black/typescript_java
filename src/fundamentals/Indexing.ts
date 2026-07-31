@@ -18,7 +18,7 @@ import { RuntimeException } from "../exceptions/RuntimeException.js";
  * an `undefined` up a `T`-typed hole to fail somewhere unrelated. A falsiness guard (`items[i] || throw`) fires
  * on `0`, `""`, `false` and `null`, all of which are perfectly legal elements.
  *
- * So this checks the *index* rather than the value: a `JavaList<number | undefined>` holding a genuine
+ * So this checks the *index* rather than the value: a `List<number | undefined>` holding a genuine
  * `undefined` reads back correctly, and a read that is actually out of range fails immediately, at the line
  * that got it wrong.
  *
