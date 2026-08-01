@@ -182,6 +182,27 @@ describe("JsonReader objects", () => {
     assert.throws(() => user.read("{}"), /\$: expected an object, got a string/);
   });
 
+  it("reads a field the document does not have as absent, even when Object.prototype has one", () => {
+    const reader = objectOf<{ toString: Optional<string>; constructor: Optional<string> }>({
+      toString: optionalValue(stringValue),
+      constructor: optionalValue(stringValue),
+    });
+    const read = reader.read({});
+    assert.ok(read.toString.isEmpty());
+    assert.ok(read.constructor.isEmpty());
+    assert.equal(reader.read({ toString: "x" }).toString.get(), "x");
+  });
+
+  it("gives back a field named __proto__ rather than setting the result's prototype", () => {
+    // The contract needs a computed key, because `{ __proto__: … }` in an object literal is JavaScript's
+    // prototype setter rather than a property, and would declare no field at all.
+    const reader = objectOf<Record<"__proto__", string>>({ ["__proto__"]: stringValue });
+    const read = reader.read(JSON.parse(`{"__proto__":"x"}`));
+    assert.equal(Object.hasOwn(read, "__proto__"), true);
+    assert.equal(read["__proto__"], "x");
+    assert.equal(Object.getPrototypeOf(read), Object.prototype);
+  });
+
   it("builds a class through mapping, rather than objectOf knowing about constructors", () => {
     const point = mapping(objectOf({ x: numberValue, y: numberValue }), ({ x, y }) => new Point(x, y));
     assert.equal(point.read({ x: 1, y: 2 }).equals(new Point(1, 2)), true);

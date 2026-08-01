@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { List } from "../src/collections/List.js";
+import { JavaMap } from "../src/collections/Map.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { IllegalStateException } from "../src/exceptions/IllegalStateException.js";
 import { XmlBindException } from "../src/exceptions/XmlBindException.js";
@@ -20,6 +21,7 @@ import {
   textContent,
   textElement,
   wrappedChildren,
+  wrappedEntries,
   booleanText,
   child,
   type XmlReader,
@@ -32,10 +34,12 @@ import {
   intoChild,
   intoChildText,
   intoChildren,
+  intoEntries,
   intoOptionalAttribute,
   intoOptionalChild,
   intoText,
   intoWrappedChildren,
+  intoWrappedEntries,
   mappingAsText,
   mappingElementFrom,
   numberAsText,
@@ -231,7 +235,7 @@ describe("XmlWriter parts", () => {
       sku: intoOptionalAttribute("sku"),
       note: intoOptionalChild("note", textElementFrom()),
     });
-    assert.equal(writeXml("a", { sku: Optional.empty(), note: Optional.empty() }, writer), "<a/>");
+    assert.equal(writeXml("a", { sku: Optional.empty<string>(), note: Optional.empty<string>() }, writer), "<a/>");
     assert.equal(
       writeXml("a", { sku: Optional.of(""), note: Optional.of("x") }, writer),
       `<a sku=""><note>x</note></a>`,
@@ -255,6 +259,69 @@ describe("XmlWriter parts", () => {
     });
     assert.equal(writeXml("a", { items: new List<string>() }, writer), "<a><items/></a>");
     assert.equal(writeXml("a", { items: new List(["hat"]) }, writer), "<a><items><item>hat</item></items></a>");
+  });
+
+  it("writes one entry element per pair, and nothing for an empty map", () => {
+    const writer = elementFrom<{ counts: JavaMap<string, number> }>({
+      counts: intoEntries("entry", intoAttribute("key"), intoText(integerAsText)),
+    });
+    const counts = new JavaMap<string, number>([
+      ["hat", 2],
+      ["scarf", 1],
+    ]);
+    assert.equal(writeXml("a", { counts }, writer), `<a><entry key="hat">2</entry><entry key="scarf">1</entry></a>`);
+    assert.equal(writeXml("a", { counts: new JavaMap<string, number>() }, writer), "<a/>");
+  });
+
+  it("puts the key and the value wherever in the entry the contract points", () => {
+    const writer = elementFrom<{ counts: ReadonlyMap<string, number> }>({
+      counts: intoEntries("entry", intoChildText("k"), intoChildText("v", integerAsText)),
+    });
+    const written = writeXml("a", { counts: new Map([["hat", 2]]) }, writer);
+    assert.equal(written, "<a><entry><k>hat</k><v>2</v></entry></a>");
+  });
+
+  it("writes the wrapper of a map even when it is empty, as it does for a collection", () => {
+    const writer = elementFrom<{ counts: ReadonlyMap<string, number> }>({
+      counts: intoWrappedEntries("counts", "entry", intoAttribute("key"), intoText(integerAsText)),
+    });
+    assert.equal(writeXml("a", { counts: new Map<string, number>() }, writer), "<a><counts/></a>");
+    const written = writeXml("a", { counts: new Map([["hat", 2]]) }, writer);
+    assert.equal(written, `<a><counts><entry key="hat">2</entry></counts></a>`);
+  });
+
+  it("indexes the entry that could not be written, key and value alike", () => {
+    const writer = elementFrom<{ counts: ReadonlyMap<string, number> }>({
+      counts: intoEntries("entry", intoAttribute("key"), intoText(integerAsText)),
+    });
+    const value = {
+      counts: new Map([
+        ["hat", 2],
+        ["scarf", 1.5],
+      ]),
+    };
+    assert.equal(bindFailure(value, writer, "a").getPath(), "/a/entry[2]/text()");
+  });
+
+  it("refuses two parts aimed at one slot inside an entry, rather than losing one", () => {
+    const writer = elementFrom<{ counts: ReadonlyMap<string, string> }>({
+      counts: intoEntries("entry", intoText(), intoText()),
+    });
+    assert.throws(() => writeXml("a", { counts: new Map([["hat", "2"]]) }, writer), IllegalStateException);
+  });
+
+  it("round-trips a map through both directions of the contract", () => {
+    const writer = elementFrom<{ counts: JavaMap<string, number> }>({
+      counts: intoWrappedEntries("counts", "entry", intoAttribute("key"), intoText(integerAsText)),
+    });
+    const reader = elementOf<{ counts: JavaMap<string, number> }>({
+      counts: wrappedEntries("counts", "entry", attribute("key"), textContent(integerText)),
+    });
+    const counts = new JavaMap<string, number>([
+      ["hat", 2],
+      ["scarf", 1],
+    ]);
+    assert.ok(readXml(writeXml("a", { counts }, writer), reader).counts.equals(counts));
   });
 
   it("writes text alongside attributes and children", () => {

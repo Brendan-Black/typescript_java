@@ -157,6 +157,18 @@ describe("JsonWriter scalars", () => {
     const lying = { sku: 42, quantity: 2 } as unknown as Item;
     assert.throws(() => item.write(lying), /\$\.sku: expected a string, got number 42/);
   });
+
+  it("names a function rather than quoting its source into the message", () => {
+    const callback = (): string => {
+      return "a body long enough that reading it back in a failure would be no use to anyone at all";
+    };
+    assert.throws(() => stringAsJson.write(callback as unknown as string), (error: unknown) => {
+      assert.ok(error instanceof JsonBindException);
+      assert.match(error.message, /\$: expected a string, got a function/);
+      assert.doesNotMatch(error.message, /long enough/);
+      return true;
+    });
+  });
 });
 
 describe("JsonWriter absence", () => {
@@ -278,6 +290,15 @@ describe("JsonWriter objects", () => {
     );
   });
 
+  it("refuses a writer that has never heard of the absence an optional property allows", () => {
+    const written = objectFrom<{ note?: string }>({
+      // @ts-expect-error stringAsJson writes a string, and `note?: string` may also be nothing
+      note: stringAsJson,
+    });
+    // What the compile error above is protecting against: the contract type-checked, and then this happened.
+    assert.throws(() => written.write({}), /\$\.note: expected a value, got nothing/);
+  });
+
   it("writes a class through mappingAsJson, rather than objectFrom knowing about its fields", () => {
     const point: JsonWriter<Point> = mappingAsJson(
       objectFrom<{ x: number; y: number }>({ x: numberAsJson, y: numberAsJson }),
@@ -371,6 +392,14 @@ describe("writeJson", () => {
     const flat = readJson(writeJson(anOrder(), order), orderReader);
     const indented = readJson(writeJson(anOrder(), order, "\t"), orderReader);
     assert.equal(writeJson(flat, order), writeJson(indented, order));
+  });
+
+  it("takes the type from the contract, not from the value it is handed", () => {
+    // @ts-expect-error the contract writes a JsonValue, and nothing is not one
+    assert.throws(() => writeJson(undefined, rawJson), JsonBindException);
+    // Reached only through a cast, and this is the alternative to answering `undefined` from a `: string`.
+    const lying = undefined as unknown as JsonValue;
+    assert.throws(() => writeJson(lying, rawJson), /\$: expected a value, got nothing/);
   });
 
   it("hands back the tree instead, for a document being built by hand", () => {

@@ -99,7 +99,7 @@ standard library and nothing else.
 ## Status
 
 Alpha, version 0.1.0, and **not yet published to npm**. The collections, `Optional`, ordering, and the exception
-hierarchy are complete and tested (754 tests); the serialization layer covers both directions of a JSON wire
+hierarchy are complete and tested (781 tests); the serialization layer covers both directions of a JSON wire
 contract and both of an XML one, parser and all. See [Roadmap](#roadmap) for what is deliberately still missing.
 
 Requirements:
@@ -139,8 +139,8 @@ Outside the namespace — no `java.*` counterpart, so these are the package's to
 | `serialization/JsonReader` | `JsonReader`, `JsonFields`, `readJson`, `objectOf`, `listOf`, `setOf`, `mapOf`, `objectAsMap`, `treeSetOf`, `treeMapOf`, `entryOf`, `arrayOf`, `stringValue`, `numberValue`, `integerValue`, `booleanValue`, `unknownValue`, `enumOf`, `nullable`, `optionalValue`, `withDefault`, `mapping` |
 | `serialization/JsonWriter` | `JsonWriter`, `JsonProperties`, `JsonValue`, `writeJson`, `objectFrom`, `arrayFrom`, `mapFrom`, `mapAsObject`, `entryFrom`, `stringAsJson`, `numberAsJson`, `integerAsJson`, `booleanAsJson`, `rawJson`, `nullableAsJson`, `optionalAsJson`, `omitWhenEmpty`, `OmittedWhenEmpty`, `mappingAsJson` |
 | `serialization/XmlParser` | `parseXml`, `XmlElement`, `isXmlName` |
-| `serialization/XmlReader` | `XmlReader`, `XmlTextReader`, `XmlField`, `XmlFields`, `readXml`, `elementOf`, `elementNamed`, `textElement`, `mappingElement`, `attribute`, `optionalAttribute`, `textContent`, `child`, `optionalChild`, `childText`, `children`, `wrappedChildren`, `stringText`, `rawText`, `numberText`, `integerText`, `booleanText`, `enumText`, `mappingText` |
-| `serialization/XmlWriter` | `XmlWriter`, `XmlTextWriter`, `XmlPart`, `XmlParts`, `XmlDraft`, `XmlFormat`, `writeXml`, `elementFrom`, `textElementFrom`, `mappingElementFrom`, `intoAttribute`, `intoOptionalAttribute`, `intoText`, `intoChild`, `intoOptionalChild`, `intoChildText`, `intoChildren`, `intoWrappedChildren`, `stringAsText`, `numberAsText`, `integerAsText`, `booleanAsText`, `mappingAsText` |
+| `serialization/XmlReader` | `XmlReader`, `XmlTextReader`, `XmlField`, `XmlFields`, `readXml`, `elementOf`, `elementNamed`, `textElement`, `mappingElement`, `attribute`, `optionalAttribute`, `textContent`, `child`, `optionalChild`, `childText`, `children`, `wrappedChildren`, `entries`, `wrappedEntries`, `stringText`, `rawText`, `numberText`, `integerText`, `booleanText`, `enumText`, `mappingText` |
+| `serialization/XmlWriter` | `XmlWriter`, `XmlTextWriter`, `XmlPart`, `XmlParts`, `XmlDraft`, `XmlFormat`, `writeXml`, `elementFrom`, `textElementFrom`, `mappingElementFrom`, `intoAttribute`, `intoOptionalAttribute`, `intoText`, `intoChild`, `intoOptionalChild`, `intoChildText`, `intoChildren`, `intoWrappedChildren`, `intoEntries`, `intoWrappedEntries`, `stringAsText`, `numberAsText`, `integerAsText`, `booleanAsText`, `mappingAsText` |
 
 These are re-exported from the package root, alongside `Java` itself. There is one import either way:
 
@@ -544,6 +544,15 @@ It is not a `JsonWriter`, and deliberately so: a writer always produces a value,
 nowhere but a key that a JSON value can simply not be — `arrayFrom(omitWhenEmpty(stringAsJson))` is a compile
 error, because an element that wrote nothing would shift every index after it. Only `objectFrom` takes one.
 
+Every writer is declared contravariant in what it writes — `JsonWriter<in T>`, and the same on the three XML
+writer types. Without that TypeScript compares two writers using the bivariance it grants every method, and
+`JsonWriter<string>` would satisfy `JsonWriter<string | undefined>`: a contract for `note?: string` could be
+built out of `stringAsJson`, type-check, and then refuse at runtime the very absence the `?` promised was
+allowed. `writeJson` and `writeXml` take the type from the contract alone for the same reason, so a value the
+contract does not describe is a compile error at the call rather than a document nobody asked for. What a `?`
+means here is that the property is not part of the wire contract and may be left off it; a value that is on the
+wire and sometimes missing is an `Optional`, which is what `optionalAsJson` and `omitWhenEmpty` write.
+
 What makes the distinction more than taste is JSON Merge Patch, where `null` and a missing key are *opposite*
 instructions: a `null` deletes the field, a missing key leaves it as it is. Two absences, so two `Optional`s —
 was the field mentioned, and if so does it have a value:
@@ -662,15 +671,33 @@ invisible in a message.
 A carriage return is written `&#13;` rather than literally, because XML requires every parser to read `\r\n` and
 a lone `\r` alike as `\n` before anything else looks at the document. `parseXml` does that too, so a document
 written on either kind of machine reads the same, and the one carriage return that was actually meant is the one
-that was escaped. Those failures
-carry the same XPath the reading ones do, and two parts aimed at one attribute is an `IllegalStateException`
-rather than one of the two values quietly vanishing. A property missing from the value at runtime — a `T` cast
-from a parsed document, or built against a version of the type without the field — is refused before it reaches
-its part, the same way `objectFrom` refuses one on the JSON side. Absence that is meant is said with
+that was escaped.
+
+Those refusals carry the same XPath the reading ones do, and two parts aimed at one attribute is an
+`IllegalStateException` rather than one of the two values quietly vanishing. A property missing at runtime — a
+`T` cast from a parsed document, or built against a version of the type without the field — is refused before
+it reaches its part, the same way `objectFrom` refuses one on the JSON side. Absence that is meant is said with
 `intoOptionalAttribute`, `intoOptionalChild`, or an empty collection. The text writers likewise check the type
 they were promised, rather than letting `booleanAsText` answer `true` to any truthy value — a document that is
 well formed and says the opposite of what was meant is worse than one that was never sent. A value containing
 itself is refused at the element where the loop closes.
+
+A map is `entries`, which reads one pair per repeated element, and `wrappedEntries` for the container form —
+`intoEntries` and `intoWrappedEntries` writing the same two shapes back. Where the key and the value sit inside
+each entry is the document's business rather than the binding's, so both are ordinary fields applied to the entry
+element, and every layout a map is written in falls out of that:
+
+```ts
+// <counts><entry key="hat">2</entry><entry key="scarf">1</entry></counts>
+wrappedEntries("counts", "entry", attribute("key"), textContent(integerText));
+intoWrappedEntries("counts", "entry", intoAttribute("key"), intoText(integerAsText));
+
+// <counts><entry><k>hat</k><v>2</v></entry></counts>
+entries("entry", childText("k"), childText("v", integerText));
+```
+
+A repeated key keeps the last entry, as `mapOf` does with the JSON form of the same contradiction, and an absent
+container reads as an empty map for the reason an absent `wrappedChildren` container reads as an empty list.
 
 Indentation is opt-in and only ever goes between child elements, the one place a parser is entitled to throw
 whitespace away. An element holding text stays on its own line, and so does one holding text and children

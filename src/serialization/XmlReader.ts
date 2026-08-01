@@ -1,4 +1,5 @@
 import { List } from "../collections/List.js";
+import { JavaMap } from "../collections/Map.js";
 import { XmlBindException } from "../exceptions/XmlBindException.js";
 import { Optional } from "../fundamentals/Optional.js";
 import { parseXml, XmlElement } from "./XmlParser.js";
@@ -13,7 +14,7 @@ import { parseXml, XmlElement } from "./XmlParser.js";
  *
  * - an {@link XmlTextReader} turns character data into a value — {@link stringText}, {@link numberText};
  * - an {@link XmlField} pulls one value *out of* an element — {@link attribute}, {@link child},
- *   {@link children}, {@link textContent};
+ *   {@link children}, {@link entries}, {@link textContent};
  * - an `XmlReader` turns an element into a `T` — {@link elementOf} over a set of fields, or
  *   {@link textElement} for an element that is just a value.
  *
@@ -291,11 +292,12 @@ export function elementOf<T extends object>(fields: XmlFields<T>): XmlReader<T> 
   const readers: readonly (readonly [string, XmlField<unknown>])[] = Object.entries(widened);
   return {
     read(element: XmlElement, path: string = rootPath(element)): T {
-      const result: Record<string, unknown> = {};
-      for (const [property, field] of readers) {
-        result[property] = field.read(element, path);
-      }
-      return result as T;
+      // Built with `fromEntries` rather than assigned into, as `objectOf` is: assigning a property named
+      // `__proto__` sets the result's prototype instead of giving it that property, so a contract declaring one
+      // would produce an object missing it. `fromEntries` defines every key as a plain one, whatever it is
+      // called. Nothing is read through a prototype here — the source is an element, not an object.
+      const read = readers.map(([property, field]) => [property, field.read(element, path)] as const);
+      return Object.fromEntries(read) as T;
     },
   };
 }
@@ -461,6 +463,77 @@ export function wrappedChildren<T>(wrapper: string, name: string, reader: XmlRea
         throw new XmlBindException(at, `expected at most one <${wrapper}>, got ${found.size()}`);
       }
       return found.size() === 0 ? new List<T>() : inner.read(found.get(0), at);
+    },
+  };
+}
+
+/**
+ * A {@link JavaMap} from repeated entry elements, one pair per element.
+ *
+ * ```xml
+ * <counts><entry key="hat">2</entry><entry key="scarf">1</entry></counts>
+ * ```
+ *
+ * ```ts
+ * entries("entry", attribute("key"), textContent(integerText));
+ * ```
+ *
+ * Where the key and the value sit inside each entry is the document's business, not this function's, so both
+ * are ordinary {@link XmlField}s applied to the entry element. That covers every shape a map is written in: a
+ * key attribute over the value as text, as above; `child("key", …)` and `child("value", …)` for the form JAXB's
+ * `@XmlJavaTypeAdapter` examples produce; two attributes for a document that keeps both short.
+ *
+ * A repeated element is how XML writes a collection and none of them is how it writes an empty one, so this
+ * never fails for absence. A document repeating a key keeps the last entry, which is what `mapOf` does with the
+ * JSON form of the same contradiction. For a `TreeMap` rather than a hash one, `new TreeMap(map)` over
+ * the result — the ordering is the caller's choice and nothing in the document says it.
+ */
+export function entries<K, V>(name: string, key: XmlField<K>, value: XmlField<V>): XmlField<JavaMap<K, V>> {
+  return {
+    read(parent: XmlElement, path: string): JavaMap<K, V> {
+      const map = new JavaMap<K, V>();
+      let index = 1;
+      for (const element of parent.getChildrenNamed(name)) {
+        // Both fields read the same element and share its path, because both values are inside the one entry.
+        const at = `${path}/${name}[${index}]`;
+        map.put(key.read(element, at), value.read(element, at));
+        index++;
+      }
+      return map;
+    },
+  };
+}
+
+/**
+ * The same entries inside a container element, which is how a map most often arrives.
+ *
+ * ```xml
+ * <counts><entry key="hat">2</entry></counts>
+ * ```
+ *
+ * ```ts
+ * wrappedEntries("counts", "entry", attribute("key"), textContent(integerText));
+ * ```
+ *
+ * {@link wrappedChildren} for a map, and absent and empty are treated the same way for the same reason: a
+ * missing container reads as an empty map rather than as a failure, and two containers is still a document
+ * contradicting itself.
+ */
+export function wrappedEntries<K, V>(
+  wrapper: string,
+  name: string,
+  key: XmlField<K>,
+  value: XmlField<V>,
+): XmlField<JavaMap<K, V>> {
+  const inner = entries(name, key, value);
+  return {
+    read(parent: XmlElement, path: string): JavaMap<K, V> {
+      const at = `${path}/${wrapper}`;
+      const found = parent.getChildrenNamed(wrapper);
+      if (found.size() > 1) {
+        throw new XmlBindException(at, `expected at most one <${wrapper}>, got ${found.size()}`);
+      }
+      return found.size() === 0 ? new JavaMap<K, V>() : inner.read(found.get(0), at);
     },
   };
 }

@@ -82,6 +82,7 @@ export {
   children,
   elementNamed,
   elementOf,
+  entries,
   enumText,
   integerText,
   mappingElement,
@@ -95,6 +96,7 @@ export {
   textContent,
   textElement,
   wrappedChildren,
+  wrappedEntries,
 } from "./serialization/XmlReader.js";
 export type { XmlFormat, XmlParts, XmlPart, XmlTextWriter, XmlWriter } from "./serialization/XmlWriter.js";
 export {
@@ -105,10 +107,12 @@ export {
   intoChild,
   intoChildText,
   intoChildren,
+  intoEntries,
   intoOptionalAttribute,
   intoOptionalChild,
   intoText,
   intoWrappedChildren,
+  intoWrappedEntries,
   mappingAsText,
   mappingElementFrom,
   numberAsText,

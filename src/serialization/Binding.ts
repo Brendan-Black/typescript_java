@@ -29,6 +29,11 @@ export function describe(value: unknown): string {
   if (typeof value === "string") {
     return "a string";
   }
+  if (typeof value === "function") {
+    // Named rather than said, because `String` on a function is its entire source: a slot holding a callback
+    // would put the whole body inside the message, and the one fact a reader of that message needs is the kind.
+    return "a function";
+  }
   return `${typeof value} ${String(value)}`;
 }
 

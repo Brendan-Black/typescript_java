@@ -344,11 +344,17 @@ export function objectOf<T extends object>(fields: JsonFields<T>): JsonReader<T>
   return {
     read(value: unknown, path: string = ROOT): T {
       const source = requireObject(value, path);
-      const result: Record<string, unknown> = {};
-      for (const [key, reader] of readers) {
-        result[key] = reader.read(source[key], `${path}.${key}`);
-      }
-      return result as T;
+      // Own keys only. A document is data, and `Object.prototype` is not part of it: a contract naming
+      // `constructor` or `toString` would otherwise find one on every object, and a field the document never
+      // mentioned would arrive at its reader as a function instead of as the absence it is.
+      const read = readers.map(([key, reader]) => {
+        const held = Object.hasOwn(source, key) ? source[key] : undefined;
+        return [key, reader.read(held, `${path}.${key}`)] as const;
+      });
+      // Built rather than assigned into for the mirror of that reason: assigning a key named `__proto__` sets
+      // the result's prototype instead of giving it a field, so a contract with such a field would produce an
+      // object missing it. `fromEntries` defines every key as a plain one, whatever it is called.
+      return Object.fromEntries(read) as T;
     },
   };
 }

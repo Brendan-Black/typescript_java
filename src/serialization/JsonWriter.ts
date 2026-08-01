@@ -53,8 +53,15 @@ export type JsonValue =
  * agree: what this sends, `readJson` reads back as an equal value, and a document assembled by
  * `JSON.stringify` is one a contract could have written. That includes the shapes where a key is simply not
  * there, which {@link omitWhenEmpty} writes and `optionalValue` has always read.
+ *
+ * The `in` says what a writer is: something that consumes a `T`, so a writer accepting *more* stands in for one
+ * accepting less and never the other way round. Without it TypeScript compares two writers using the bivariance
+ * it grants every method, and `JsonWriter<string>` would satisfy `JsonWriter<string | undefined>` — which is how
+ * a contract for `note?: string` could be built out of `stringAsJson` and then refuse the absence the `?`
+ * promised. {@link JsonProperties} is where that happens, and the annotation is what turns it into the compile
+ * error it should always have been.
  */
-export interface JsonWriter<T> {
+export interface JsonWriter<in T> {
   /**
    * @param value the value to write
    * @param path where this value sits in the document. Supplied by the composing writers; callers writing a
@@ -73,8 +80,10 @@ export interface JsonWriter<T> {
  * writer. Keeping the two apart is also what makes `arrayFrom(omitWhenEmpty(stringAsJson))` a compile error —
  * an array element that writes nothing would shift every index after it, and there is nowhere else in a
  * document that a value can simply not be.
+ *
+ * Contravariant in `T` for the reason {@link JsonWriter} is: this consumes a value too.
  */
-export interface OmittedWhenEmpty<T> {
+export interface OmittedWhenEmpty<in T> {
   /**
    * @param value the value to write
    * @param path where this value sits in the document, supplied by {@link objectFrom}
@@ -450,10 +459,22 @@ export function objectFrom<T extends object>(properties: JsonProperties<T>): Jso
  * For the tree rather than the text of it — to nest it in a document being assembled by hand, or to look at
  * what a contract produces — call `order.write(value)` and keep the {@link JsonValue}.
  *
+ * The contract names the type, not the value: `T` is read off `writer` alone, so `value` is checked against what
+ * the contract says it writes rather than the two meeting somewhere in the middle. Handing this a value the
+ * contract does not describe is the mistake, and this is where it should be caught.
+ *
  * @param indent what to indent one level of nesting with, as `JSON.stringify` takes it: a string, or a number
  *   of spaces. Left out, the document is a single line.
  * @throws {@link JsonBindException} if some value has no JSON representation, naming the slot
  */
-export function writeJson<T>(value: T, writer: JsonWriter<T>, indent?: string | number): string {
-  return JSON.stringify(writer.write(value, ROOT), null, indent);
+export function writeJson<T>(value: NoInfer<T>, writer: JsonWriter<T>, indent?: string | number): string {
+  const document: string | undefined = JSON.stringify(writer.write(value, ROOT), null, indent);
+  if (document === undefined) {
+    // `JSON.stringify` answers with `undefined` rather than a string for a value it will not write, which no
+    // JsonWriter can hand it — the return type says so, and {@link rawJson} is the only writer that does not
+    // check. So this is reachable only through a cast, and it is the difference between a caller seeing a
+    // failure at the slot and a caller sending the four letters `undefined` over a socket typed `string`.
+    throw new JsonBindException(ROOT, "expected a value, got nothing");
+  }
+  return document;
 }

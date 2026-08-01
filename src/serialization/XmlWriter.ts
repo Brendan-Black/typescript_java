@@ -13,7 +13,7 @@ import { findForbiddenCharacter, isXmlName, XmlElement } from "./XmlParser.js";
  *
  * - an {@link XmlTextWriter} turns a value into character data — {@link stringAsText}, {@link numberAsText};
  * - an {@link XmlPart} writes one value *into* an element — {@link intoAttribute}, {@link intoChild},
- *   {@link intoChildren}, {@link intoText};
+ *   {@link intoChildren}, {@link intoEntries}, {@link intoText};
  * - an `XmlWriter` turns a `T` into a whole element — {@link elementFrom} over a set of parts, or
  *   {@link textElementFrom} for an element that is just a value.
  *
@@ -38,8 +38,14 @@ import { findForbiddenCharacter, isXmlName, XmlElement } from "./XmlParser.js";
  * Where a reader takes the path it is reading at, a writer takes the name it is writing under. Neither is
  * something the layer itself can know: an element's name belongs to whatever holds it, which is why the same
  * `item` writer above serves under `<item>` here and under any other name elsewhere.
+ *
+ * The `in` says what a writer is: something that consumes a `T`, so a writer accepting *more* stands in for one
+ * accepting less and never the other way round. Without it TypeScript compares two writers using the bivariance
+ * it grants every method, and `XmlWriter<string>` would satisfy `XmlWriter<string | undefined>` — which is how a
+ * contract for `note?: string` could be built out of a writer that has never heard of absence, and then refuse
+ * at runtime what the `?` promised was allowed.
  */
-export interface XmlWriter<T> {
+export interface XmlWriter<in T> {
   /**
    * @param value the value to write
    * @param name the tag name to write it under, supplied by whatever holds this element
@@ -56,8 +62,10 @@ export interface XmlWriter<T> {
  * Text is all XML has, so every scalar in a document goes out through one of these. The path is required for
  * the reason it is required when reading: character data has no name of its own, and only the caller knows
  * where the text is headed.
+ *
+ * Contravariant in `T` for the reason {@link XmlWriter} is: this consumes a value too.
  */
-export interface XmlTextWriter<T> {
+export interface XmlTextWriter<in T> {
   /** @throws {@link XmlBindException} if the value has no XML representation */
   write(value: T, path: string): string;
 }
@@ -68,8 +76,11 @@ export interface XmlTextWriter<T> {
  * The counterpart of an `XmlField`, and the piece JSON has no need of. A JSON field is a key with a value under
  * it; an XML one has to say *where* the value goes before it can say what it looks like, and `@id` and `<id>`
  * are different places.
+ *
+ * Contravariant in `T` for the reason {@link XmlWriter} is, and the one it matters most for: {@link XmlParts} is
+ * where a part meets the property it was declared against.
  */
-export interface XmlPart<T> {
+export interface XmlPart<in T> {
   /**
    * @param value the value to write
    * @param into the element being assembled
@@ -476,6 +487,73 @@ export function intoWrappedChildren<T>(wrapper: string, name: string, writer: Xm
   };
 }
 
+/**
+ * One entry element per pair, which is how a map is written: the mirror of the reader's `entries`.
+ *
+ * ```ts
+ * intoEntries("entry", intoAttribute("key"), intoText(integerAsText));
+ * // <entry key="hat">2</entry><entry key="scarf">1</entry>
+ * ```
+ *
+ * Where the key and the value sit inside each entry is the contract's business, so both are ordinary
+ * {@link XmlPart}s written into the entry being built — the same two pieces the reader takes, pointed the other
+ * way. Aiming both at the same slot is a failure rather than a silent loss, because {@link XmlDraft} refuses to
+ * write one attribute or one run of text twice.
+ *
+ * Anything iterable of pairs will do — a {@link JavaMap} read out of a document, a native `Map`, or the array of
+ * pairs a caller happened to have — and the entries come out in that thing's own order. An empty map writes
+ * nothing at all, which is what the reader gives an empty map back for.
+ */
+export function intoEntries<K, V>(
+  name: string,
+  key: XmlPart<K>,
+  value: XmlPart<V>,
+): XmlPart<Iterable<readonly [K, V]>> {
+  requireName(name, "an element name");
+  return {
+    write(pairs: Iterable<readonly [K, V]>, into: XmlDraft, path: string): void {
+      let index = 1;
+      for (const [held, against] of pairs) {
+        const at = `${path}/${name}[${index}]`;
+        const draft = new XmlDraft();
+        key.write(held, draft, at);
+        value.write(against, draft, at);
+        into.addChild(draft.build(name));
+        index++;
+      }
+    },
+  };
+}
+
+/**
+ * The same entries inside a container element, the mirror of the reader's `wrappedEntries`.
+ *
+ * ```ts
+ * intoWrappedEntries("counts", "entry", intoAttribute("key"), intoText(integerAsText));
+ * // <counts><entry key="hat">2</entry></counts>
+ * ```
+ *
+ * {@link intoWrappedChildren} for a map, and the container is written even when the map is empty for the same
+ * reason: `<counts/>` is what a schema expecting it will accept, and the reader reads that and a missing
+ * container alike.
+ */
+export function intoWrappedEntries<K, V>(
+  wrapper: string,
+  name: string,
+  key: XmlPart<K>,
+  value: XmlPart<V>,
+): XmlPart<Iterable<readonly [K, V]>> {
+  requireName(wrapper, "an element name");
+  const inner = intoEntries(name, key, value);
+  return {
+    write(pairs: Iterable<readonly [K, V]>, into: XmlDraft, path: string): void {
+      const draft = new XmlDraft();
+      inner.write(pairs, draft, `${path}/${wrapper}`);
+      into.addChild(draft.build(wrapper));
+    },
+  };
+}
+
 /** How a document is laid out on the way out. Neither choice changes what reads back from it. */
 export interface XmlFormat {
   /** Whether to head the document with `<?xml version="1.0" encoding="UTF-8"?>`, on its own line. Off by default. */
@@ -498,10 +576,13 @@ export interface XmlFormat {
  * For the element rather than the text of it — to nest it in a document being built by hand, or to look at what
  * a contract produces — call `order.write(value, "order")` and keep the {@link XmlElement}.
  *
+ * The contract names the type, not the value: `T` is read off `writer` alone, so `value` is checked against what
+ * the contract says it writes rather than the two meeting somewhere in the middle.
+ *
  * @throws {@link IllegalArgumentException} if `name` is not a usable XML name
  * @throws {@link XmlBindException} if some value has no XML representation, naming the slot as an XPath
  */
-export function writeXml<T>(name: string, value: T, writer: XmlWriter<T>, format: XmlFormat = {}): string {
+export function writeXml<T>(name: string, value: NoInfer<T>, writer: XmlWriter<T>, format: XmlFormat = {}): string {
   requireName(name, "an element name");
   const root = writer.write(value, name);
   const body = format.indent === undefined ? root.toXml() : root.toIndentedXml(format.indent);

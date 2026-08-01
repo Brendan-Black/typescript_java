@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { List } from "../src/collections/List.js";
+import { JavaMap } from "../src/collections/Map.js";
 import { IllegalArgumentException } from "../src/exceptions/IllegalArgumentException.js";
 import { XmlBindException } from "../src/exceptions/XmlBindException.js";
 import { XmlParseException } from "../src/exceptions/XmlParseException.js";
@@ -16,6 +17,7 @@ import {
   children,
   elementNamed,
   elementOf,
+  entries,
   enumText,
   integerText,
   mappingElement,
@@ -29,6 +31,7 @@ import {
   textContent,
   textElement,
   wrappedChildren,
+  wrappedEntries,
   type XmlReader,
 } from "../src/serialization/XmlReader.js";
 
@@ -207,6 +210,56 @@ describe("XmlReader fields", () => {
     assert.equal(readXml("<order><items/></order>", reader).skus.size(), 0);
     const repeated = bindFailure("<order><items/><items/></order>", reader);
     assert.match(repeated.message, /expected at most one <items>, got 2/);
+  });
+
+  it("reads entry elements as a map, keyed however the document keys them", () => {
+    const reader = elementOf<{ counts: JavaMap<string, number> }>({
+      counts: entries("entry", attribute("key"), textContent(integerText)),
+    });
+    const counts = readXml(`<order><entry key="hat">2</entry><entry key="scarf">1</entry></order>`, reader).counts;
+    assert.equal(counts.size(), 2);
+    assert.equal(counts.get("hat"), 2);
+    assert.equal(counts.get("scarf"), 1);
+    assert.equal(readXml("<order/>", reader).counts.size(), 0);
+  });
+
+  it("takes the key and the value from wherever in the entry the contract points", () => {
+    const reader = elementOf<{ counts: JavaMap<string, number> }>({
+      counts: entries("entry", childText("k"), childText("v", integerText)),
+    });
+    const counts = readXml("<order><entry><k>hat</k><v>2</v></entry></order>", reader).counts;
+    assert.equal(counts.get("hat"), 2);
+  });
+
+  it("keeps the last of a repeated key, as the JSON pair form does", () => {
+    const reader = elementOf<{ counts: JavaMap<string, number> }>({
+      counts: entries("entry", attribute("key"), textContent(integerText)),
+    });
+    const counts = readXml(`<order><entry key="hat">2</entry><entry key="hat">5</entry></order>`, reader).counts;
+    assert.equal(counts.size(), 1);
+    assert.equal(counts.get("hat"), 5);
+  });
+
+  it("indexes an entry that fails by its position, key and value alike", () => {
+    const reader = elementOf<{ counts: JavaMap<string, number> }>({
+      counts: entries("entry", attribute("key"), textContent(integerText)),
+    });
+    const bad = bindFailure(`<order><entry key="hat">2</entry><entry key="scarf">x</entry></order>`, reader);
+    assert.equal(bad.getPath(), "/order/entry[2]/text()");
+    assert.equal(bindFailure(`<order><entry>2</entry></order>`, reader).getPath(), "/order/entry[1]/@key");
+  });
+
+  it("reads a wrapped map, and an absent wrapper as empty", () => {
+    const reader = elementOf<{ counts: JavaMap<string, number> }>({
+      counts: wrappedEntries("counts", "entry", attribute("key"), textContent(integerText)),
+    });
+    const found = readXml(`<order><counts><entry key="hat">2</entry></counts></order>`, reader).counts;
+    assert.equal(found.get("hat"), 2);
+    assert.equal(readXml("<order/>", reader).counts.size(), 0);
+    assert.equal(readXml("<order><counts/></order>", reader).counts.size(), 0);
+    const repeated = bindFailure("<order><counts/><counts/></order>", reader);
+    assert.match(repeated.message, /expected at most one <counts>, got 2/);
+    assert.equal(repeated.getPath(), "/order/counts");
   });
 
   it("reads an element carrying both an attribute and a value", () => {
