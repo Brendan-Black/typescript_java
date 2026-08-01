@@ -185,6 +185,33 @@ describe("XmlWriter text", () => {
     assert.equal(back.getText(), "1 < 2 & 3");
     assert.equal(back.getAttribute("note").get(), 'a "friend"\nnext');
   });
+
+  it("writes a carriage return as a reference, so it does not read back as a newline", () => {
+    const written = writeXml("note", "one\rtwo", textElementFrom());
+    assert.equal(written, "<note>one&#13;two</note>");
+    assert.equal(textElement(rawText).read(parseXml(written)), "one\rtwo");
+  });
+
+  it("refuses a character XML cannot carry, naming it, rather than sending a document nothing can read", () => {
+    assert.match(bindFailure("x\u0000y", textElementFrom()).message, /U\+0000 is not a character XML can carry/);
+    assert.match(bindFailure("x\u001Fy", textElementFrom()).message, /U\+001F/);
+    assert.match(bindFailure("\ud800", textElementFrom()).message, /U\+D800/);
+    assert.throws(() => stringAsText.write("\u0000", "/a/@v"), XmlBindException);
+  });
+
+  it("names the slot the forbidden character sits in, wherever in the element it was", () => {
+    const writer = elementFrom<{ body: string; note: string }>({
+      body: intoText(),
+      note: intoAttribute("note"),
+    });
+    assert.equal(bindFailure({ body: "\u0000", note: "fine" }, writer, "a").getPath(), "/a/text()");
+    assert.equal(bindFailure({ body: "fine", note: "\u0000" }, writer, "a").getPath(), "/a/@note");
+  });
+
+  it("keeps writing the characters XML does allow, surrogate pairs and whitespace included", () => {
+    assert.equal(writeXml("a", "\u{1F600}", textElementFrom()), "<a>\u{1F600}</a>");
+    assert.equal(writeXml("a", "one\ttwo\nthree", textElementFrom()), "<a>one\ttwo\nthree</a>");
+  });
 });
 
 describe("XmlWriter parts", () => {

@@ -124,6 +124,9 @@ export const rawText: XmlTextReader<string> = {
  * The format is checked rather than handed to `Number`, which would otherwise accept `0x1f`, `Infinity` and the
  * empty string — none of which any Java service will have written, and all of which would arrive as a plausible
  * looking number rather than as the mismatch they are.
+ *
+ * A literal too large for a `double` is refused as well, because the format alone does not catch it: `1e400` is
+ * spelled exactly as XML Schema requires and overflows to `Infinity`, which is not a number the document said.
  */
 export const numberText: XmlTextReader<number> = {
   read(text: string, path: string): number {
@@ -131,7 +134,11 @@ export const numberText: XmlTextReader<number> = {
     if (!/^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(trimmed)) {
       return fail(path, "a number", trimmed);
     }
-    return Number(trimmed);
+    const value = Number(trimmed);
+    if (!Number.isFinite(value)) {
+      throw new XmlBindException(path, `${trimmed} is too large to read as a number`);
+    }
+    return value;
   },
 };
 

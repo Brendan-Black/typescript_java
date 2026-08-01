@@ -3,7 +3,7 @@ import { IllegalStateException } from "../exceptions/IllegalStateException.js";
 import { XmlBindException } from "../exceptions/XmlBindException.js";
 import { Optional } from "../fundamentals/Optional.js";
 import { describe, withoutCycles } from "./Binding.js";
-import { isXmlName, XmlElement } from "./XmlParser.js";
+import { findForbiddenCharacter, isXmlName, XmlElement } from "./XmlParser.js";
 
 /**
  * Turns a `T` into an element — the other direction of `XmlReader`, and JAXB's marshaller in the role it plays
@@ -150,6 +150,11 @@ function cycle(path: string): never {
   throw new XmlBindException(path, "a value contains itself, and an XML document is a tree");
 }
 
+/** A character in the `U+0000` notation, since the ones this names are all invisible in a message. */
+function codePoint(code: number): string {
+  return `U+${code.toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
 /**
  * The text writers check the type they were promised before writing it, as the JSON scalars do and for the same
  * reason: a `T` reaching this layer can lie, and this is the last thing that runs before the value leaves the
@@ -168,13 +173,23 @@ function requireType(value: unknown, expected: "string" | "number" | "boolean", 
  * There is one of these where reading has two. `stringText` trims and `rawText` does not, because a reader has
  * to decide what to make of the indentation a sender chose; a writer is handed the exact string that was meant
  * and has no such choice to make. Anything that needs escaping is escaped on the way out, so a value carrying
- * `<`, `&` or a newline arrives as itself.
+ * `<`, `&`, a newline or a carriage return arrives as itself.
+ *
+ * A string XML cannot carry at all is refused here instead — the control characters, and a surrogate left
+ * unpaired. Escaping does not reach them: `&#0;` is as illegal as a literal NUL, which is why the parser
+ * already refuses both. So a document containing one is not a document, and the receiver would answer with a
+ * parse error against a payload this end thought it had sent successfully. Failing at the slot names the value
+ * instead, which is the same trade {@link numberAsText} makes over `NaN`.
  *
  * A union of string literals needs nothing more than this — `Priority` is a `string`, and so writes as one.
  */
 export const stringAsText: XmlTextWriter<string> = {
   write(value: string, path: string): string {
     requireType(value, "string", path);
+    const forbidden = findForbiddenCharacter(value);
+    if (forbidden >= 0) {
+      throw new XmlBindException(path, `${codePoint(forbidden)} is not a character XML can carry`);
+    }
     return value;
   },
 };

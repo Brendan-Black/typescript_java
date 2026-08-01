@@ -21,6 +21,10 @@ import { Optional } from "../fundamentals/Optional.js";
  * holds `" Ada "`, and it is the reader's business to decide whether to trim. Text inside `CDATA` is always kept
  * verbatim — writing it out at all is a statement that its contents are deliberate.
  *
+ * Line endings arrive normalised, as XML requires of every parser: a `\r\n` and a lone `\r` both read as `\n`,
+ * whichever machine wrote the document. A carriage return that is genuinely part of a value is written `&#13;`,
+ * which survives, and {@link toXml} writes one that way for exactly that reason.
+ *
  * Namespaces are left as written. A prefixed name stays prefixed, `xmlns` declarations are ordinary attributes,
  * and {@link getLocalName} is there for a caller who wants to match without the prefix. Resolving prefixes to
  * URIs is a separate job that no document this parser is aimed at needs done for it.
@@ -231,17 +235,45 @@ export function isXmlName(text: string): boolean {
 }
 
 function escapeText(text: string): string {
-  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  // A carriage return goes out as a reference because a parser reading this back is required to fold it into a
+  // newline otherwise — see the note on line-end handling in the parser below. It is the one character that
+  // survives being written literally and comes back as something else.
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\r", "&#13;");
 }
 
 function escapeAttribute(value: string): string {
-  // Newlines and tabs go out as references because a parser reading this back is required to fold them into
-  // spaces otherwise — see the note on attribute-value normalisation in the reader below.
-  return escapeText(value)
-    .replaceAll('"', "&quot;")
-    .replaceAll("\n", "&#10;")
-    .replaceAll("\r", "&#13;")
-    .replaceAll("\t", "&#9;");
+  // Newlines and tabs go out as references for the same kind of reason: a parser reading this back is required
+  // to fold them into spaces — see the note on attribute-value normalisation in the reader below.
+  return escapeText(value).replaceAll('"', "&quot;").replaceAll("\n", "&#10;").replaceAll("\t", "&#9;");
+}
+
+/**
+ * The first character in a string that XML cannot carry, as a code point, or -1 when every one of them is fine.
+ *
+ * The writers check the values in a contract with this, because these are the characters no amount of escaping
+ * rescues: `&#0;` is as illegal as a literal NUL, so a document carrying one is not a document at all and
+ * nothing on the far end will read it back. It is {@link isXmlName}'s counterpart for the other half of what an
+ * element holds — a name has to be a `Name`, and everything else has only to be characters that exist.
+ *
+ * The character rather than a yes or no, because a value that fails this is usually a long one that picked up a
+ * stray byte somewhere, and `U+0000` in the message is the difference between a failure a caller can go and
+ * find and one they can only stare at.
+ *
+ * Iteration is by code point, so a surrogate pair is judged as the character it spells while an unpaired
+ * surrogate is judged as itself, which is what makes the second one fail.
+ */
+export function findForbiddenCharacter(text: string): number {
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    if (!isAllowedCharacter(code)) {
+      return code;
+    }
+  }
+  return -1;
 }
 
 /** The characters XML allows at all. Everything else is refused even when written as a character reference. */
@@ -278,7 +310,14 @@ class Parser {
   constructor(text: string) {
     // A byte-order mark is a fact about the encoding, not about the document, and it is only ever a nuisance
     // once the bytes are already a JavaScript string.
-    this.#text = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+    const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+    // XML's line-end handling, which the specification requires before anything else looks at the document:
+    // every `\r\n` and every lone `\r` is a `\n`. It happens here rather than in the text and attribute readers
+    // because it applies to all of them at once — content, CDATA and attribute values alike — and because a
+    // failure's line and column should count the line breaks a reader of the document would count, which is one
+    // per `\r\n` rather than two. A carriage return that is meant survives as `&#13;`, resolved after this and
+    // therefore untouched by it, which is how {@link XmlElement.toXml} writes one.
+    this.#text = body.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
   }
 
   /** The whole document: optional prolog, exactly one root element, nothing of substance after it. */

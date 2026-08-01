@@ -122,6 +122,27 @@ describe("parseXml text", () => {
     assert.equal(root.getAttribute("t").get(), "");
     assert.ok(root.getAttribute("u").isEmpty());
   });
+
+  it("reads every spelling of a line ending as a newline, whichever machine wrote the document", () => {
+    assert.equal(parseXml("<a>one\r\ntwo</a>").getText(), "one\ntwo");
+    assert.equal(parseXml("<a>one\rtwo</a>").getText(), "one\ntwo");
+    assert.equal(parseXml("<a>one\ntwo</a>").getText(), "one\ntwo");
+    assert.equal(parseXml("<a><![CDATA[one\r\ntwo]]></a>").getText(), "one\ntwo");
+  });
+
+  it("folds a normalised line ending in an attribute into one space, not two", () => {
+    assert.equal(parseXml('<a t="one\r\ntwo"/>').getAttribute("t").get(), "one two");
+    assert.equal(parseXml('<a t="one\rtwo"/>').getAttribute("t").get(), "one two");
+  });
+
+  it("keeps a carriage return that was written as a reference, which is what asks for one", () => {
+    assert.equal(parseXml("<a>one&#13;two</a>").getText(), "one\rtwo");
+    assert.equal(parseXml('<a t="one&#13;two"/>').getAttribute("t").get(), "one\rtwo");
+  });
+
+  it("counts a CRLF as the one line break a reader of the document would count", () => {
+    assert.equal(parseFailure("<a>\r\n\r\n<b></c></a>").getLine(), 3);
+  });
 });
 
 describe("parseXml prolog", () => {
@@ -186,6 +207,13 @@ describe("XmlElement rendering and equality", () => {
     const written = new XmlElement("a", [["t", "one\ntwo"]]).toXml();
     assert.equal(written, `<a t="one&#10;two"/>`);
     assert.equal(parseXml(written).getAttribute("t").get(), "one\ntwo");
+  });
+
+  it("writes a carriage return as a reference, which is the only way one survives being read back", () => {
+    const written = new XmlElement("a", [["t", "one\rtwo"]], [], "three\rfour").toXml();
+    assert.equal(written, `<a t="one&#13;two">three&#13;four</a>`);
+    assert.equal(parseXml(written).getAttribute("t").get(), "one\rtwo");
+    assert.equal(parseXml(written).getText(), "three\rfour");
   });
 
   it("indents child elements, one to a line", () => {

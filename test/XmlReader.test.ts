@@ -127,6 +127,12 @@ describe("XmlReader text", () => {
     assert.match(bindFailure("<x>9007199254740993</x>", textElement(integerText)).message, /too large/);
   });
 
+  it("refuses a literal that overflows, rather than reading it as Infinity", () => {
+    assert.match(bindFailure("<total>1e400</total>", textElement(numberText)).message, /too large/);
+    assert.throws(() => numberText.read("-1e400", "/x"), XmlBindException);
+    assert.equal(numberText.read("1e308", "/x"), 1e308);
+  });
+
   it("refuses a boolean Java's own parseBoolean would have called false", () => {
     const error = bindFailure("<paid>yes</paid>", textElement(booleanText));
     assert.match(error.message, /expected true or false, got "yes"/);

@@ -508,11 +508,15 @@ a wrong one comes from. It is the same premise that justifies refusing an absent
 layer can lie — cast from `JSON.parse`, handed over by an untyped library, built against an older version of the
 type — and this is the last thing that runs before the value leaves the process. Unchecked, `stringAsJson` would
 have written the number and produced a document its own reader rejects, at the far end and against the wrong
-party. A value that contains itself is refused for a related reason: a document is a tree, and where
-`JSON.stringify` says only `Converting circular structure to JSON`, this says which slot closed the loop.
+party. `mapAsObject` checks its keys on the same grounds, a `Java.Map<number, V>` cast to a string-keyed one
+being the ordinary way a key of another type arrives: JavaScript would otherwise turn it into a property name
+without comment, sending `{"7":…}` that the reader gives back as the string `"7"`. A value that contains itself
+is refused for a related reason: a document is a tree, and where `JSON.stringify` says only
+`Converting circular structure to JSON`, this says which slot closed the loop.
 
 ```
 $.sku: expected a string, got number 42
+$.counts: expected a string key, got number 7
 $.children[0]: a value contains itself, and a JSON document is a tree
 ```
 
@@ -613,9 +617,13 @@ every other XML tool already speaks:
 
 `stringText` trims, since indentation is not content; `rawText` is there for when it is. `booleanText` accepts
 XML Schema's four spellings and refuses everything else — Java's own `Boolean.parseBoolean` answers `false` to a
-typo, which is the wrong end of the trade for a wire contract. Namespaces are left as written: a prefixed name
-stays prefixed, `xmlns` declarations are ordinary attributes, and `getLocalName()` is there for matching without
-one. DTDs are skipped rather than honoured, so an undeclared entity is a failure instead of a silent hole.
+typo, which is the wrong end of the trade for a wire contract. `numberText` checks the lexical form rather than
+handing the text to `Number`, which would take `0x1f`, `Infinity` and the empty string, and it refuses a literal
+that overflows: `1e400` is spelled exactly as XML Schema requires and is not a number a `double` can hold, so
+reading it as `Infinity` would invent a value the document never contained. Namespaces are left as written: a
+prefixed name stays prefixed, `xmlns` declarations are ordinary attributes, and `getLocalName()` is there for
+matching without one. DTDs are skipped rather than honoured, so an undeclared entity is a failure instead of a
+silent hole.
 
 Writing is the same three layers in reverse, and the contract reads line for line like the one above. An
 `XmlTextWriter` turns a value into character data, an `XmlPart` says *where in the element it goes*, and an
@@ -644,8 +652,17 @@ document being assembled by hand — call `order.write(value, "order")` and keep
 
 Whatever `writeXml` produces, `parseXml` reads back as an equal element and a matching reader as an equal value.
 That guarantee is why a few things are refused rather than written: `NaN` and the infinities, an integer larger
-than JavaScript was holding exactly, and a tag or attribute name that is not an XML name — no amount of escaping
-rescues `<order id>`, and a document nothing can read back is worse than a failure at the slot. Those failures
+than JavaScript was holding exactly, a tag or attribute name that is not an XML name, and a string carrying a
+character XML has no way to hold — a control character, or a surrogate left unpaired. No amount of escaping
+rescues any of them: `<order id>` is not a document, and `&#0;` is exactly as illegal as the literal NUL it
+spells. A document nothing can read back is worse than a failure at the slot, and the failure names the
+character — `/order/note/text(): U+0000 is not a character XML can carry` — since the ones it catches are all
+invisible in a message.
+
+A carriage return is written `&#13;` rather than literally, because XML requires every parser to read `\r\n` and
+a lone `\r` alike as `\n` before anything else looks at the document. `parseXml` does that too, so a document
+written on either kind of machine reads the same, and the one carriage return that was actually meant is the one
+that was escaped. Those failures
 carry the same XPath the reading ones do, and two parts aimed at one attribute is an `IllegalStateException`
 rather than one of the two values quietly vanishing. A property missing from the value at runtime — a `T` cast
 from a parsed document, or built against a version of the type without the field — is refused before it reaches

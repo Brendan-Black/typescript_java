@@ -250,6 +250,17 @@ describe("JsonWriter collections", () => {
     assert.equal(readJson(written, objectAsMap(integerValue)).get("__proto__"), 1);
   });
 
+  it("refuses a key that is not a string, rather than coercing one into a property name", () => {
+    const writer = mapAsObject(integerAsJson) as unknown as JsonWriter<Iterable<readonly [unknown, number]>>;
+    assert.throws(() => writer.write([[7, 1]]), (error: unknown) => {
+      assert.ok(error instanceof JsonBindException);
+      assert.match(error.message, /expected a string key, got number 7/);
+      return true;
+    });
+    // A symbol is the case that fails as a bare TypeError if the check comes after the path is built.
+    assert.throws(() => writer.write([[Symbol("s"), 1]]), JsonBindException);
+  });
+
   it("writes a map entry as the object form one reads", () => {
     assert.deepEqual(entryFrom(stringAsJson, integerAsJson).write(new MapEntry<string, number>("a", 1)), {
       key: "a",

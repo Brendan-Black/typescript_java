@@ -351,6 +351,11 @@ export function mapFrom<K, V>(key: JsonWriter<K>, value: JsonWriter<V>): JsonWri
  *
  * A key repeating — possible from a hand-rolled iterable, though not from a map — keeps the last of them,
  * because that is the entry a reader would end up with anyway.
+ *
+ * The keys are checked to be strings, for the reason the scalar writers check the type they were promised: a
+ * `JavaMap<number, V>` cast to this one is the ordinary way a key of another type arrives, and JavaScript would
+ * otherwise turn it into a property name without comment — sending `{"7":…}`, which the reader gives back as
+ * the string `"7"`.
  */
 export function mapAsObject<V>(value: JsonWriter<V>): JsonWriter<Iterable<readonly [string, V]>> {
   return {
@@ -358,6 +363,11 @@ export function mapAsObject<V>(value: JsonWriter<V>): JsonWriter<Iterable<readon
       return withoutCycles(entries, () => cycle(path), () => {
         const written: [string, JsonValue][] = [];
         for (const [key, held] of entries) {
+          if (typeof key !== "string") {
+            // Before the path is built rather than after: a symbol in a template literal throws a bare
+            // TypeError, which would leave this the one slot that fails as something other than a bind failure.
+            throw new JsonBindException(path, `expected a string key, got ${describe(key)}`);
+          }
           written.push([key, value.write(held, `${path}.${key}`)]);
         }
         // `fromEntries` rather than assigning into a literal: these keys are data, and `result["__proto__"] = x`
